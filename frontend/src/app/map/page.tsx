@@ -30,9 +30,10 @@ function MapContent() {
     waterLevels: true,
     satellite: false,
     floodDepth: false,
-    rainfall: false,
+    rainfall: true,
   });
   const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   const loadMapData = async () => {
     try {
@@ -59,6 +60,7 @@ function MapContent() {
     try {
       await pipelineAPI.fetchWater(selectedBasin || undefined);
       await loadMapData();
+      setLastUpdate(new Date());
       toast.success("อัพเดทสำเร็จ!", { id: "refresh" });
     } catch {
       toast.error("ล้มเหลว", { id: "refresh" });
@@ -186,12 +188,53 @@ function MapContent() {
 
         {/* Stats */}
         {waterLevels && (
-          <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-mono">
-            <div className="text-xs font-semibold text-primary-900 uppercase tracking-wider mb-2">
-              Summary
+          <div className="mt-6 space-y-3">
+            <div className="p-4 bg-primary-50 border border-primary-200 rounded-mono">
+              <div className="text-xs font-semibold text-primary-900 uppercase tracking-wider mb-3">
+                Summary
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-primary-700">สถานี</span>
+                  <span className="text-lg font-bold text-primary-900 font-mono">
+                    {waterLevels.features?.length || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-primary-700">🔴 วิกฤต</span>
+                  <span className="text-lg font-bold text-red-600 font-mono">
+                    {waterLevels.features?.filter(f => f.properties.risk_level === "critical").length || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-primary-700">🟠 เตือนภัย</span>
+                  <span className="text-lg font-bold text-orange-600 font-mono">
+                    {waterLevels.features?.filter(f => f.properties.risk_level === "warning").length || 0}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-primary-700">🟡 เฝ้าระวัง</span>
+                  <span className="text-lg font-bold text-yellow-600 font-mono">
+                    {waterLevels.features?.filter(f => f.properties.risk_level === "watch").length || 0}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="text-sm text-primary-700 font-mono">
-              Stations: {waterLevels.features?.length || 0}
+
+            <div className="p-4 bg-green-50 border border-green-200 rounded-mono">
+              <div className="text-xs font-semibold text-green-900 uppercase tracking-wider mb-2">
+                Last Update
+              </div>
+              <div className="text-sm text-green-700 font-mono">
+                {lastUpdate.toLocaleString("th-TH", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                })}
+              </div>
+            </div>
+
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-mono text-xs text-blue-700">
+              💡 <strong>Tip:</strong> Click on markers for detailed information. Use layer controls to toggle different data views.
             </div>
           </div>
         )}
