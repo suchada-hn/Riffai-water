@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from datetime import datetime, timedelta
 from typing import Optional
+import json
 
 from app.models.database import get_db
 from app.models.models import WaterLevel, Rainfall, SatelliteImage, Station
@@ -61,11 +62,48 @@ async def get_rainfall_data(
     db: AsyncSession = Depends(get_db),
 ):
     since = datetime.utcnow() - timedelta(days=days)
+
+    # #region agent log
+    try:
+        bind = db.get_bind()
+        dialect = getattr(getattr(bind, "dialect", None), "name", None)
+    except Exception:
+        dialect = None
+    try:
+        with open("/Users/macosx/Desktop/Riffai/Riffai-water-1/.cursor/debug-0ae64a.log", "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "0ae64a",
+                        "runId": "pre-fix",
+                        "hypothesisId": "H5",
+                        "location": "backend/app/api/endpoints/data.py:get_rainfall_data",
+                        "message": "Rainfall request (aggregate/dialect)",
+                        "data": {"basin_id": basin_id, "days": days, "aggregate": aggregate, "dialect": dialect},
+                        "timestamp": int(datetime.utcnow().timestamp() * 1000),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
     
-    if aggregate == "daily":
+    if aggregate in ("daily", "monthly"):
+        # Pick a date bucket function that matches the DB dialect.
+        if dialect == "postgresql":
+            bucket = func.date_trunc("day" if aggregate == "daily" else "month", Rainfall.datetime).label("date")
+        else:
+            # SQLite: use date()/strftime() instead of PostgreSQL date_trunc.
+            bucket = (
+                func.date(Rainfall.datetime).label("date")
+                if aggregate == "daily"
+                else func.strftime("%Y-%m-01", Rainfall.datetime).label("date")
+            )
         query = (
             select(
-                func.date_trunc("day", Rainfall.datetime).label("date"),
+                bucket,
                 func.sum(Rainfall.amount_mm).label("total_mm"),
                 func.avg(Rainfall.amount_mm).label("avg_mm"),
                 func.max(Rainfall.amount_mm).label("max_mm"),
@@ -82,12 +120,41 @@ async def get_rainfall_data(
             .where(and_(Station.basin_id == basin_id, Rainfall.datetime >= since))
             .order_by(Rainfall.datetime)
         )
-    
-    result = await db.execute(query)
+
+    try:
+        result = await db.execute(query)
+    except Exception as e:
+        # #region agent log
+        try:
+            with open("/Users/macosx/Desktop/Riffai/Riffai-water-1/.cursor/debug-0ae64a.log", "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "0ae64a",
+                            "runId": "pre-fix",
+                            "hypothesisId": "H6",
+                            "location": "backend/app/api/endpoints/data.py:get_rainfall_data",
+                            "message": "Rainfall query failed",
+                            "data": {"errorType": type(e).__name__, "error": str(e), "aggregate": aggregate, "dialect": dialect},
+                            "timestamp": int(datetime.utcnow().timestamp() * 1000),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # #endregion
+        raise
     
     if aggregate == "daily":
         data = [
             {"date": r[0].isoformat(), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
+            for r in result
+        ]
+    elif aggregate == "monthly":
+        data = [
+            {"date": (r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
             for r in result
         ]
     else:
