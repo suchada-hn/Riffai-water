@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Bell, X, AlertTriangle, Info, CheckCircle, XCircle } from "lucide-react";
 import toast from "react-hot-toast";
+import api from "@/services/api";
 
 interface Alert {
   id: number;
@@ -33,8 +34,7 @@ export default function AlertCenter() {
 
   const loadAlerts = async () => {
     try {
-      const response = await fetch("http://localhost:8000/api/alerts");
-      const data = await response.json();
+      const data = (await api.get("/api/alerts")).data;
       
       // Check for new alerts
       const newAlerts = data.filter(
@@ -60,9 +60,7 @@ export default function AlertCenter() {
 
   const markAsRead = async (alertId: number) => {
     try {
-      await fetch(`http://localhost:8000/api/alerts/${alertId}/read`, {
-        method: "POST",
-      });
+      await api.post(`/api/alerts/${alertId}/read`);
       setAlerts((prev) =>
         prev.map((a) => (a.id === alertId ? { ...a, read: true } : a))
       );
@@ -75,9 +73,7 @@ export default function AlertCenter() {
     try {
       await Promise.all(
         alerts.filter((a) => !a.read).map((a) =>
-          fetch(`http://localhost:8000/api/alerts/${a.id}/read`, {
-            method: "POST",
-          })
+          api.post(`/api/alerts/${a.id}/read`)
         )
       );
       setAlerts((prev) => prev.map((a) => ({ ...a, read: true })));
@@ -88,9 +84,7 @@ export default function AlertCenter() {
 
   const deleteAlert = async (alertId: number) => {
     try {
-      await fetch(`http://localhost:8000/api/alerts/${alertId}`, {
-        method: "DELETE",
-      });
+      await api.delete(`/api/alerts/${alertId}`);
       setAlerts((prev) => prev.filter((a) => a.id !== alertId));
     } catch (error) {
       console.error("Failed to delete alert:", error);
