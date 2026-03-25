@@ -10,6 +10,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
+const FloodRiskMapEmbed = dynamic(() => import("@/components/map/FloodRiskMapEmbed"), { ssr: false });
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -40,6 +41,7 @@ function MapContent() {
     rainfall: true,
     heatmap: true,
     timelapse: false,
+    floodRiskMap: false,
     tambonFlood: false,
   });
   const [loading, setLoading] = useState(true);
@@ -125,6 +127,7 @@ function MapContent() {
               { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
               { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
               { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
+              { key: "floodRiskMap" as const, label: "Flood Risk Map (iframe)", description: "Embedded HTML map" },
               { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
               { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
               { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
@@ -324,6 +327,9 @@ function MapContent() {
           selectedBasin={selectedBasin}
           layers={layers}
         />
+
+        {/* Flood Risk Map Embed */}
+        <FloodRiskMapEmbed visible={layers.floodRiskMap} />
         
         {/* Tambon Flood Layer */}
         {layers.tambonFlood && (
