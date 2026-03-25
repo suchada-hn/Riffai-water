@@ -120,28 +120,46 @@ export default function AnalyticsPage() {
             <StatCard
               icon={Droplets}
               label="ระดับน้ำเฉลี่ย"
-              value={`${stats?.dashboard?.avgWaterLevel?.toFixed(2) || "0.00"} ม.`}
+              value={
+                typeof stats?.dashboard?.avgWaterLevel === "number"
+                  ? `${stats.dashboard.avgWaterLevel.toFixed(2)} ม.`
+                  : "—"
+              }
               change={12}
               color="bg-blue-500"
             />
             <StatCard
               icon={Cloud}
               label="ปริมาณฝนสะสม"
-              value={`${stats?.dashboard?.totalRainfall?.toFixed(0) || "0"} มม.`}
+              value={
+                typeof stats?.dashboard?.totalRainfall === "number"
+                  ? `${stats.dashboard.totalRainfall.toFixed(0)} มม.`
+                  : "—"
+              }
               change={-8}
               color="bg-sky-500"
             />
             <StatCard
               icon={AlertTriangle}
               label="พื้นที่เสี่ยง"
-              value={stats?.tiles?.riskCounts?.critical + stats?.tiles?.riskCounts?.warning || 0}
+              value={
+                stats?.tiles?.riskCounts &&
+                typeof stats.tiles.riskCounts.critical === "number" &&
+                typeof stats.tiles.riskCounts.warning === "number"
+                  ? stats.tiles.riskCounts.critical + stats.tiles.riskCounts.warning
+                  : "—"
+              }
               change={5}
               color="bg-orange-500"
             />
             <StatCard
               icon={Users}
               label="ประชากรเสี่ยง"
-              value={`${(stats?.tiles?.totalPopulationAtRisk / 1000).toFixed(0)}K`}
+              value={
+                typeof stats?.tiles?.totalPopulationAtRisk === "number"
+                  ? `${(stats.tiles.totalPopulationAtRisk / 1000).toFixed(0)}K`
+                  : "—"
+              }
               change={3}
               color="bg-red-500"
             />
