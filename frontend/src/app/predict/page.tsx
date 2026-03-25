@@ -11,15 +11,15 @@ import { PredictionResult } from "@/types";
 import toast from "react-hot-toast";
 
 const BASINS = [
-  { id: "mekong_north", name: "Mekong North Basin" },
-  { id: "eastern_coast", name: "Eastern Coast Basin" },
-  { id: "southern_east", name: "Southern East Basin" },
+    { id: "basin_3", name: "ลุ่มน้ำโขงเหนือ (Basin 3)" },
+    { id: "basin_10", name: "ลุ่มน้ำชายฝั่งทะเลตะวันออก (Basin 10)" },
+    { id: "basin_17", name: "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนล่าง (Basin 17)" },
 ];
 
 function PredictContent() {
   const searchParams = useSearchParams();
   const [basinId, setBasinId] = useState(
-    searchParams?.get("basin") || "mekong_north"
+        searchParams?.get("basin") || "basin_3"
   );
   const [daysAhead, setDaysAhead] = useState(30);
   const [loading, setLoading] = useState(false);
