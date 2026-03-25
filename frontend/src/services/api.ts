@@ -10,12 +10,74 @@ const api = axios.create({
 
 // Auto attach token
 api.interceptors.request.use((config) => {
+  // #region agent log
+  if (typeof window !== "undefined") {
+    const dbg = {
+      sessionId: "0ae64a",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "frontend/src/services/api.ts:request-interceptor",
+      message: "Axios request config (baseURL/url)",
+      data: {
+        apiUrlEnv: process.env.NEXT_PUBLIC_API_URL ? "[set]" : "[unset]",
+        apiUrlDefault: API_URL,
+        baseURL: config.baseURL,
+        url: config.url,
+        method: config.method,
+      },
+      timestamp: Date.now(),
+    };
+    fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0ae64a" },
+      body: JSON.stringify(dbg),
+    }).catch(() => {});
+  }
+  // #endregion
+
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("riffai_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (resp) => resp,
+  (error) => {
+    // #region agent log
+    if (typeof window !== "undefined") {
+      const cfg = error?.config;
+      const resp = error?.response;
+      const dbg = {
+        sessionId: "0ae64a",
+        runId: "pre-fix",
+        hypothesisId: "H2",
+        location: "frontend/src/services/api.ts:response-error-interceptor",
+        message: "Axios response error (network/config)",
+        data: {
+          message: error?.message,
+          code: error?.code,
+          name: error?.name,
+          baseURL: cfg?.baseURL,
+          url: cfg?.url,
+          method: cfg?.method,
+          timeout: cfg?.timeout,
+          status: resp?.status,
+          statusText: resp?.statusText,
+        },
+        timestamp: Date.now(),
+      };
+      fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0ae64a" },
+        body: JSON.stringify(dbg),
+      }).catch(() => {});
+    }
+    // #endregion
+    return Promise.reject(error);
+  }
+);
 
 // ═══════════ Auth ═══════════
 export const authAPI = {

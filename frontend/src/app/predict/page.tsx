@@ -2,7 +2,21 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Brain, Settings, Calendar, Droplets, Maximize2, Target, Cpu, Database, TrendingUp, Clock, MapPin, Layers, Map } from "lucide-react";
+import {
+  Brain,
+  Settings,
+  Calendar,
+  Droplets,
+  Maximize2,
+  Target,
+  Cpu,
+  Database,
+  TrendingUp,
+  Clock,
+  MapPin,
+  Layers,
+  Map,
+} from "lucide-react";
 import Navbar from "@/components/common/Navbar";
 import RiskBadge from "@/components/common/RiskBadge";
 import FloodDepthLegend from "@/components/prediction/FloodDepthLegend";
@@ -11,15 +25,15 @@ import { PredictionResult } from "@/types";
 import toast from "react-hot-toast";
 
 const BASINS = [
-    { id: "basin_3", name: "ลุ่มน้ำโขงเหนือ (Basin 3)" },
-    { id: "basin_10", name: "ลุ่มน้ำชายฝั่งทะเลตะวันออก (Basin 10)" },
-    { id: "basin_17", name: "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนล่าง (Basin 17)" },
+  { id: "mekong_north", name: "Mekong North Basin" },
+  { id: "eastern_coast", name: "Eastern Coast Basin" },
+  { id: "southern_east", name: "Southern East Basin" },
 ];
 
 function PredictContent() {
   const searchParams = useSearchParams();
   const [basinId, setBasinId] = useState(
-        searchParams?.get("basin") || "basin_3"
+    searchParams?.get("basin") || "mekong_north",
   );
   const [daysAhead, setDaysAhead] = useState(30);
   const [loading, setLoading] = useState(false);
@@ -52,10 +66,9 @@ function PredictContent() {
       setResult(res.data);
       toast.success("พยากรณ์สำเร็จ!", { id: "predict" });
     } catch (err: any) {
-      toast.error(
-        err.response?.data?.detail || "เกิดข้อผิดพลาด",
-        { id: "predict" }
-      );
+      toast.error(err.response?.data?.detail || "เกิดข้อผิดพลาด", {
+        id: "predict",
+      });
     } finally {
       setLoading(false);
     }
@@ -174,15 +187,19 @@ function PredictContent() {
                     >
                       <div className="flex justify-between items-start mb-1">
                         <div className="text-primary-600 font-mono">
-                          {new Date(h.predict_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "2-digit",
-                          })}
+                          {new Date(h.predict_date).toLocaleDateString(
+                            "en-US",
+                            {
+                              month: "short",
+                              day: "2-digit",
+                            },
+                          )}
                         </div>
                         <RiskBadge level={h.risk_level} size="sm" />
                       </div>
                       <div className="text-primary-500 font-mono text-[10px]">
-                        → {new Date(h.target_date).toLocaleDateString("en-US", {
+                        →{" "}
+                        {new Date(h.target_date).toLocaleDateString("en-US", {
                           month: "short",
                           day: "2-digit",
                         })}
@@ -240,7 +257,7 @@ function PredictContent() {
                       label="Target Date"
                       value={new Date(result.target_date).toLocaleDateString(
                         "en-US",
-                        { month: "short", day: "2-digit", year: "numeric" }
+                        { month: "short", day: "2-digit", year: "numeric" },
                       )}
                     />
                     <DetailBox
@@ -272,11 +289,15 @@ function PredictContent() {
                   {/* Input summary */}
                   <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-mono text-xs text-primary-700 font-mono">
                     <div className="flex items-center justify-center gap-4">
-                      <span>Satellite: {result.input_summary.satellite_records}</span>
+                      <span>
+                        Satellite: {result.input_summary.satellite_records}
+                      </span>
                       <span>•</span>
                       <span>Water: {result.input_summary.water_records}</span>
                       <span>•</span>
-                      <span>Rainfall: {result.input_summary.rainfall_records}</span>
+                      <span>
+                        Rainfall: {result.input_summary.rainfall_records}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -287,7 +308,7 @@ function PredictContent() {
                     <Layers className="w-5 h-5" />
                     Flood Depth Analysis
                   </h3>
-                  
+
                   {/* Legend */}
                   <div className="mb-4">
                     <FloodDepthLegend />
@@ -296,7 +317,10 @@ function PredictContent() {
                   {/* Visualization placeholder */}
                   <div className="aspect-video bg-primary-50 border-2 border-primary-200 rounded-mono flex items-center justify-center">
                     <div className="text-center">
-                      <Map className="w-12 h-12 mx-auto mb-3 text-primary-400" strokeWidth={1.5} />
+                      <Map
+                        className="w-12 h-12 mx-auto mb-3 text-primary-400"
+                        strokeWidth={1.5}
+                      />
                       <div className="text-sm text-primary-600 font-medium">
                         Flood depth heatmap visualization
                       </div>
@@ -309,7 +333,10 @@ function PredictContent() {
               </div>
             ) : (
               <div className="card-mono p-12 text-center">
-                <Brain className="w-20 h-20 mx-auto mb-4 text-primary-400" strokeWidth={1.5} />
+                <Brain
+                  className="w-20 h-20 mx-auto mb-4 text-primary-400"
+                  strokeWidth={1.5}
+                />
                 <h3 className="text-xl font-bold text-primary-900 mb-2">
                   AI Flood Prediction System
                 </h3>
@@ -317,9 +344,12 @@ function PredictContent() {
                   Select basin → Choose forecast period → Run prediction
                 </p>
                 <div className="text-xs text-primary-500 space-y-1 font-mono max-w-md mx-auto">
-                  <div>CNN + LSTM analysis of Sentinel-1/2 satellite imagery</div>
                   <div>
-                    Combined with water level, rainfall, and NDVI/NDWI/MNDWI indices
+                    CNN + LSTM analysis of Sentinel-1/2 satellite imagery
+                  </div>
+                  <div>
+                    Combined with water level, rainfall, and NDVI/NDWI/MNDWI
+                    indices
                   </div>
                 </div>
               </div>
