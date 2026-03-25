@@ -4,11 +4,13 @@ import { useState, useEffect, useRef } from "react";
 import { GeoJSON } from "react-leaflet";
 import L from "leaflet";
 import TimelapseControl from "./TimelapseControl";
+import { mapAPI } from "@/services/api";
 
 interface TimelapseHeatmapProps {
   visible: boolean;
   startDate: Date;
   endDate: Date;
+  basinId?: string | null;
 }
 
 const RISK_COLORS: Record<string, string> = {
@@ -23,6 +25,7 @@ export default function TimelapseHeatmap({
   visible,
   startDate,
   endDate,
+  basinId,
 }: TimelapseHeatmapProps) {
   const [currentDate, setCurrentDate] = useState(endDate);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -67,34 +70,9 @@ export default function TimelapseHeatmap({
   const loadTilesForDate = async (date: Date) => {
     try {
       setLoading(true);
-      // In production, this would fetch historical data for the specific date
-      const response = await fetch("http://localhost:8000/api/map/tiles");
-      const data = await response.json();
-      
-      // Simulate historical variation by modifying risk levels based on date
-      const daysAgo = Math.ceil((endDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-      const modifiedFeatures = data.features.map((feature: any) => {
-        // Simulate risk level changes over time
-        const riskLevels = ["safe", "normal", "watch", "warning", "critical"];
-        const currentIndex = riskLevels.indexOf(feature.properties.riskLevel);
-        const variation = Math.floor(Math.sin(daysAgo * 0.5) * 2);
-        const newIndex = Math.max(0, Math.min(4, currentIndex + variation));
-        
-        return {
-          ...feature,
-          properties: {
-            ...feature.properties,
-            riskLevel: riskLevels[newIndex],
-            stats: {
-              ...feature.properties.stats,
-              avgWaterLevel: feature.properties.stats.avgWaterLevel * (1 + Math.sin(daysAgo * 0.3) * 0.2),
-              rainfall24h: Math.max(0, feature.properties.stats.rainfall24h * (1 + Math.cos(daysAgo * 0.4) * 0.3)),
-            },
-          },
-        };
-      });
-      
-      setTiles(modifiedFeatures);
+      const day = date.toISOString().slice(0, 10);
+      const res = await mapAPI.tiles({ basin_id: basinId || undefined, date: day });
+      setTiles(res.data.features || []);
     } catch (error) {
       console.error("Failed to load tiles:", error);
     } finally {

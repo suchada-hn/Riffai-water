@@ -116,6 +116,7 @@ export default function MapViewSimple({
           visible={layers.timelapse}
           startDate={new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
           endDate={new Date()}
+          basinId={selectedBasin}
         />
       )}
 
@@ -124,6 +125,7 @@ export default function MapViewSimple({
         <TileHeatmap
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
+          basinId={selectedBasin}
         />
       )}
 

@@ -10,6 +10,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
+import { useRouter } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -22,6 +23,7 @@ const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
 
 function MapContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
@@ -29,6 +31,10 @@ function MapContent() {
   const [tileSummary, setTileSummary] = useState<any>(null);
   const [selectedBasin, setSelectedBasin] = useState<string | null>(
     searchParams?.get("basin") || null
+  );
+  const [subbasins, setSubbasins] = useState<GeoJSONFeatureCollection | null>(null);
+  const [selectedSubbasin, setSelectedSubbasin] = useState<string | null>(
+    searchParams?.get("subbasin") || null
   );
   const [layers, setLayers] = useState({
     basins: true,
@@ -53,7 +59,7 @@ function MapContent() {
         mapAPI.waterLevelMap(selectedBasin || undefined),
         mapAPI.rivers(),
         mapAPI.dams(),
-        mapAPI.tilesSummary(),
+        mapAPI.tilesSummary({ basin_id: selectedBasin || undefined }),
       ]);
       setBasins(b.data);
       setWaterLevels(w.data);
@@ -71,6 +77,36 @@ function MapContent() {
 
   useEffect(() => {
     loadMapData();
+  }, [selectedBasin]);
+
+  useEffect(() => {
+    const syncUrl = () => {
+      const params = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+      if (selectedBasin) params.set("basin", selectedBasin);
+      else params.delete("basin");
+      if (selectedSubbasin) params.set("subbasin", selectedSubbasin);
+      else params.delete("subbasin");
+      router.replace(`?${params.toString()}`);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    syncUrl();
+  }, [selectedBasin, selectedSubbasin]);
+
+  useEffect(() => {
+    const loadSub = async () => {
+      if (!selectedBasin) {
+        setSubbasins(null);
+        setSelectedSubbasin(null);
+        return;
+      }
+      try {
+        const res = await mapAPI.subbasins(selectedBasin);
+        setSubbasins(res.data);
+      } catch (e) {
+        setSubbasins(null);
+      }
+    };
+    loadSub();
   }, [selectedBasin]);
 
   const refreshData = async () => {
@@ -108,9 +144,34 @@ function MapContent() {
             className="input-mono text-sm"
           >
             <option value="">All Basins</option>
-            <option value="mekong_north">Mekong North</option>
-            <option value="eastern_coast">Eastern Coast</option>
-            <option value="southern_east">Southern East</option>
+            {(basins?.features || []).map((f: any) => (
+              <option key={f.properties.id} value={f.properties.id}>
+                {f.properties.name || f.properties.id}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Sub-basin select */}
+        <div className="mb-6">
+          <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+            Select Sub-basin
+          </label>
+          <select
+            value={selectedSubbasin || ""}
+            onChange={(e) => setSelectedSubbasin(e.target.value || null)}
+            className="input-mono text-sm"
+            disabled={!selectedBasin || !subbasins}
+          >
+            <option value="">All Sub-basins</option>
+            {(subbasins?.features || []).map((f: any, idx: number) => (
+              <option
+                key={f.properties.subbasin_id || f.properties.id || idx}
+                value={f.properties.subbasin_id || f.properties.id || String(idx)}
+              >
+                {f.properties.name || f.properties.subbasin_id || f.properties.id || `subbasin-${idx + 1}`}
+              </option>
+            ))}
           </select>
         </div>
 

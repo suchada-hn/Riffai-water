@@ -1,95 +1,247 @@
 """
 API endpoints for grid-based tile system
 """
-from fastapi import APIRouter, Query
-from typing import Optional, List
+from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Optional, Dict, Any, List, Tuple
+from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+
+from app.models.database import get_db
+from app.models.models import Station, WaterLevel, Rainfall
+from app.config import get_settings
 from app.data.grid_tiles import (
-    generate_thailand_tiles,
-    get_tiles_by_risk,
-    get_tile_by_id,
-    get_tile_history,
-    get_tiles_summary,
+    THAILAND_BOUNDS,
+    TILE_SIZE,
+    is_tile_in_thailand,
+    generate_tile_id,
+    get_tile_bounds,
+    tile_polygon_coordinates,
+    calculate_risk_level,
+    TILE_PROVINCES,
 )
 
 router = APIRouter()
+settings = get_settings()
+
+
+def _parse_date(date: Optional[str]) -> datetime:
+    if not date:
+        return datetime.utcnow()
+    try:
+        # Accept YYYY-MM-DD or ISO-8601
+        if len(date) == 10:
+            return datetime.fromisoformat(date)
+        return datetime.fromisoformat(date.replace("Z", "+00:00"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD or ISO-8601.")
+
+
+def _tile_key_for_station(lat: float, lon: float) -> Optional[str]:
+    """
+    Return tile id for a station point based on its containing tile origin,
+    or None if outside Thailand tile grid.
+    """
+    if lat is None or lon is None:
+        return None
+    origin_lat = THAILAND_BOUNDS["lat_min"] + (int((lat - THAILAND_BOUNDS["lat_min"]) / TILE_SIZE) * TILE_SIZE)
+    origin_lon = THAILAND_BOUNDS["lon_min"] + (int((lon - THAILAND_BOUNDS["lon_min"]) / TILE_SIZE) * TILE_SIZE)
+    origin_lat = round(origin_lat, 1)
+    origin_lon = round(origin_lon, 1)
+    if not is_tile_in_thailand(origin_lat, origin_lon):
+        return None
+    return generate_tile_id(origin_lat, origin_lon)
+
+
+async def _load_station_snapshots(
+    db: AsyncSession,
+    as_of: datetime,
+) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, float], Dict[str, float]]:
+    """
+    Load station metadata plus recent water/rain measurements in [as_of-24h, as_of].
+
+    Returns:
+      - stations: station_id -> {lat, lon, basin_id, station_type}
+      - water_avg: station_id -> avg level_m over window (water stations)
+      - rain_sum: station_id -> sum amount_mm over window (rain stations)
+    """
+    window_start = as_of - timedelta(hours=24)
+
+    stations_rows = (await db.execute(
+        select(Station.id, Station.lat, Station.lon, Station.basin_id, Station.station_type)
+        .where(Station.is_active == True)
+    )).all()
+    stations: Dict[str, Dict[str, Any]] = {
+        r[0]: {"lat": r[1], "lon": r[2], "basin_id": r[3], "station_type": r[4]}
+        for r in stations_rows
+    }
+
+    # Aggregate water levels for the last 24 hours
+    wl_rows = (await db.execute(
+        select(WaterLevel.station_id, WaterLevel.level_m)
+        .where(and_(WaterLevel.datetime >= window_start, WaterLevel.datetime <= as_of))
+    )).all()
+    water_bucket: Dict[str, List[float]] = {}
+    for sid, lvl in wl_rows:
+        if lvl is None:
+            continue
+        water_bucket.setdefault(sid, []).append(float(lvl))
+    water_avg: Dict[str, float] = {sid: (sum(vals) / len(vals)) for sid, vals in water_bucket.items() if vals}
+
+    # Aggregate rainfall for the last 24 hours
+    rf_rows = (await db.execute(
+        select(Rainfall.station_id, Rainfall.amount_mm)
+        .where(and_(Rainfall.datetime >= window_start, Rainfall.datetime <= as_of))
+    )).all()
+    rain_bucket: Dict[str, float] = {}
+    for sid, amt in rf_rows:
+        if amt is None:
+            continue
+        rain_bucket[sid] = rain_bucket.get(sid, 0.0) + float(amt)
+
+    return stations, water_avg, rain_bucket
 
 
 @router.get("/tiles")
 async def get_tiles(
     risk_level: Optional[str] = Query(None, regex="^(safe|normal|watch|warning|critical)$"),
+    basin_id: Optional[str] = Query(None, description="Filter tiles by basin_id"),
+    date: Optional[str] = Query(None, description="As-of date (YYYY-MM-DD or ISO)"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get all tiles or filter by risk level
-    
-    ⚠️ NOTE: Currently using simulated data for demonstration
-    
-    Risk levels:
-    - safe: No risk
-    - normal: Normal conditions
-    - watch: Monitor closely
-    - warning: High risk
-    - critical: Immediate danger
     """
-    if risk_level:
-        tiles = get_tiles_by_risk(risk_level)
-    else:
-        tiles = generate_thailand_tiles()
+    as_of = _parse_date(date)
+    stations, water_avg, rain_sum = await _load_station_snapshots(db, as_of)
+
+    # Build per-tile aggregations from real station readings.
+    tile_water_vals: Dict[str, List[float]] = {}
+    tile_rain_vals: Dict[str, List[float]] = {}
+    tile_station_count: Dict[str, int] = {}
+    tile_basin_votes: Dict[str, Dict[str, int]] = {}
+
+    for sid, meta in stations.items():
+        tid = _tile_key_for_station(meta["lat"], meta["lon"])
+        if not tid:
+            continue
+        tile_station_count[tid] = tile_station_count.get(tid, 0) + 1
+        bid = meta.get("basin_id")
+        if bid:
+            tile_basin_votes.setdefault(tid, {})
+            tile_basin_votes[tid][bid] = tile_basin_votes[tid].get(bid, 0) + 1
+
+        if sid in water_avg:
+            tile_water_vals.setdefault(tid, []).append(water_avg[sid])
+        if sid in rain_sum:
+            tile_rain_vals.setdefault(tid, []).append(rain_sum[sid])
+
+    features: List[Dict[str, Any]] = []
+    lat = THAILAND_BOUNDS["lat_min"]
+    while lat < THAILAND_BOUNDS["lat_max"]:
+        lon = THAILAND_BOUNDS["lon_min"]
+        while lon < THAILAND_BOUNDS["lon_max"]:
+            if not is_tile_in_thailand(lat, lon):
+                lon += TILE_SIZE
+                continue
+
+            tid = generate_tile_id(lat, lon)
+            waters = tile_water_vals.get(tid, [])
+            rains = tile_rain_vals.get(tid, [])
+            avg_water = (sum(waters) / len(waters)) if waters else 0.0
+            rain_24h = sum(rains) if rains else 0.0
+            risk = calculate_risk_level(avg_water, rain_24h)
+
+            votes = tile_basin_votes.get(tid, {})
+            inferred_basin_id = max(votes.items(), key=lambda kv: kv[1])[0] if votes else None
+
+            props: Dict[str, Any] = {
+                "id": tid,
+                "bounds": None,
+                "center": [lat + TILE_SIZE / 2, lon + TILE_SIZE / 2],
+                "riskLevel": risk,
+                "basin_id": inferred_basin_id,
+                "stats": {
+                    "avgWaterLevel": round(avg_water, 2),
+                    "rainfall24h": round(rain_24h, 1),
+                    "stationCount": tile_station_count.get(tid, 0),
+                    "populationAtRisk": 0,
+                    "trend": "stable",
+                    "trendPercent": 0.0,
+                },
+                "provinces": TILE_PROVINCES.get(tid, ["ไม่ระบุ"]),
+                "rivers": [],
+                "dams": [],
+                "aiPrediction": {
+                    "floodProbability": 0.0,
+                    "daysAhead": 1,
+                },
+                "lastUpdate": as_of.isoformat(),
+            }
+
+            if basin_id and inferred_basin_id and inferred_basin_id != basin_id:
+                lon += TILE_SIZE
+                continue
+            if basin_id and inferred_basin_id is None:
+                # If filtering by basin, keep only tiles with a basin assignment.
+                lon += TILE_SIZE
+                continue
+            if risk_level and risk != risk_level:
+                lon += TILE_SIZE
+                continue
+
+            features.append({
+                "type": "Feature",
+                "id": tid,
+                "properties": props,
+                "geometry": {"type": "Polygon", "coordinates": tile_polygon_coordinates(lat, lon)},
+            })
+
+            lon += TILE_SIZE
+        lat += TILE_SIZE
     
     return {
         "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "id": tile["id"],
-                "properties": {
-                    **tile,
-                    "bounds": None,  # Remove from properties
-                },
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [tile["bounds"][0][1], tile["bounds"][0][0]],  # SW
-                        [tile["bounds"][1][1], tile["bounds"][0][0]],  # SE
-                        [tile["bounds"][1][1], tile["bounds"][1][0]],  # NE
-                        [tile["bounds"][0][1], tile["bounds"][1][0]],  # NW
-                        [tile["bounds"][0][1], tile["bounds"][0][0]],  # Close
-                    ]],
-                },
-            }
-            for tile in tiles
-        ],
+        "features": features,
         "meta": {
-            "dataSource": "simulated",
-            "warning": "This data is simulated for demonstration purposes",
-            "note": "Production version will use real-time data from monitoring stations"
-        }
+            "dataSource": "database",
+            "asOf": as_of.isoformat(),
+            "basinFilter": basin_id,
+            "riskFilter": risk_level,
+        },
     }
 
 
 @router.get("/tiles/summary")
-async def get_summary():
+async def get_summary(
+    basin_id: Optional[str] = Query(None, description="Filter by basin_id"),
+    date: Optional[str] = Query(None, description="As-of date (YYYY-MM-DD or ISO)"),
+    db: AsyncSession = Depends(get_db),
+):
     """
     Get summary statistics of all tiles
-    
-    ⚠️ NOTE: Currently using simulated data for demonstration
     """
-    summary = get_tiles_summary()
-    summary["meta"] = {
-        "dataSource": "simulated",
-        "warning": "This data is simulated for demonstration purposes"
+    fc = await get_tiles(risk_level=None, basin_id=basin_id, date=date, db=db)
+    risk_counts = {"safe": 0, "normal": 0, "watch": 0, "warning": 0, "critical": 0}
+    total_pop = 0
+    for f in fc.get("features", []):
+        rl = (f.get("properties") or {}).get("riskLevel") or "safe"
+        if rl in risk_counts:
+            risk_counts[rl] += 1
+        total_pop += ((f.get("properties") or {}).get("stats") or {}).get("populationAtRisk") or 0
+    return {
+        "totalTiles": len(fc.get("features", [])),
+        "riskCounts": risk_counts,
+        "totalPopulationAtRisk": total_pop,
+        "lastUpdate": (fc.get("meta") or {}).get("asOf"),
+        "meta": {**(fc.get("meta") or {}), "dataSource": "database"},
     }
-    return summary
 
 
 @router.get("/tiles/{tile_id}")
 async def get_tile(tile_id: str):
     """Get detailed information for a specific tile"""
-    tile = get_tile_by_id(tile_id)
-    
-    if not tile:
-        return {"error": "Tile not found"}, 404
-    
-    return tile
+    raise HTTPException(status_code=501, detail="Use /tiles and filter by id client-side for now.")
 
 
 @router.get("/tiles/{tile_id}/history")
@@ -98,13 +250,7 @@ async def get_history(
     days: int = Query(default=7, ge=1, le=30),
 ):
     """Get historical data for a tile"""
-    history = get_tile_history(tile_id, days)
-    
-    return {
-        "tileId": tile_id,
-        "days": days,
-        "history": history,
-    }
+    raise HTTPException(status_code=501, detail="Use /tiles with ?date=YYYY-MM-DD for timelapse/history.")
 
 
 @router.get("/tiles/{tile_id}/satellite")

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { GeoJSON, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
+import { mapAPI } from "@/services/api";
 
 interface TileStats {
   avgWaterLevel: number;
@@ -41,6 +42,7 @@ interface TileFeature {
 interface TileHeatmapProps {
   visible: boolean;
   onTileClick?: (tile: TileProperties) => void;
+  basinId?: string | null;
 }
 
 const RISK_COLORS: Record<string, string> = {
@@ -59,7 +61,7 @@ const RISK_LABELS: Record<string, string> = {
   critical: "วิกฤต",
 };
 
-export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) {
+export default function TileHeatmap({ visible, onTileClick, basinId }: TileHeatmapProps) {
   const [tiles, setTiles] = useState<TileFeature[]>([]);
   const [selectedTile, setSelectedTile] = useState<TileProperties | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,14 +71,13 @@ export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) 
     if (visible) {
       loadTiles();
     }
-  }, [visible]);
+  }, [visible, basinId]);
 
   const loadTiles = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/map/tiles");
-      const data = await response.json();
-      setTiles(data.features || []);
+      const res = await mapAPI.tiles({ basin_id: basinId || undefined });
+      setTiles(res.data.features || []);
     } catch (error) {
       console.error("Failed to load tiles:", error);
     } finally {

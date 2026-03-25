@@ -10,6 +10,7 @@ from app.services.gcs_service import GCSService
 from app.config import get_settings
 from app.data.rivers import get_rivers_geojson
 from app.data.dams import get_dams_geojson
+from app.data.boundary_loader import load_basins_geojson, load_subbasins_geojson
 
 router = APIRouter()
 settings = get_settings()
@@ -20,6 +21,11 @@ gcs = GCSService()
 async def get_basins_geojson(db: AsyncSession = Depends(get_db)):
     """ขอบเขต GeoJSON ของ 3 ลุ่มน้ำ"""
     try:
+        # Prefer real boundaries from GeoJSON (downloaded from GCS)
+        fc = load_basins_geojson()
+        if fc:
+            return fc
+
         result = await db.execute(
             select(Basin.id, Basin.name, Basin.provinces, Basin.area_sqkm, Basin.bbox)
         )
@@ -48,6 +54,38 @@ async def get_basins_geojson(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         print(f"Error in get_basins_geojson: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load basins: {str(e)}")
+
+
+@router.get("/subbasins")
+async def get_subbasins_geojson(
+    basin_id: str = Query(..., description="Basin id (e.g. mekong_north)"),
+):
+    """
+    Sub-basin boundaries as GeoJSON FeatureCollection.
+
+    Expected file: backend/app/data/boundaries/subbasins_<basin_id>.geojson
+    """
+    try:
+        fc = load_subbasins_geojson(basin_id)
+        if not fc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Subbasins not found for basin_id={basin_id}. Expected file subbasins_{basin_id}.geojson",
+            )
+
+        # Ensure stable fields exist (frontend filtering / selection)
+        for f in fc.get("features", []):
+            props = f.get("properties") or {}
+            props.setdefault("basin_id", basin_id)
+            props.setdefault("subbasin_id", props.get("id") or props.get("sub_id") or props.get("name") or None)
+            f["properties"] = props
+
+        return fc
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in get_subbasins_geojson: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to load subbasins: {str(e)}")
 
 
 @router.get("/stations")
