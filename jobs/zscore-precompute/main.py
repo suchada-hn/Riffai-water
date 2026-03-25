@@ -138,7 +138,7 @@ def main():
     with Reader(local_tif) as src:
         for z in range(cfg.zoom_min, cfg.zoom_max + 1):
             # NOTE: This iterates the whole world at zoom; in production restrict bounds to basin bbox.
-            for t in _iter_tiles_for_world(z):
+            for t in mercantile.tiles(*src.bounds, zooms=[z]):
                 try:
                     img = src.tile(t.x, t.y, t.z, tilesize=256, resampling_method="bilinear")
                 except Exception:
