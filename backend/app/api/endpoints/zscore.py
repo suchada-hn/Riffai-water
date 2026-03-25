@@ -90,8 +90,9 @@ async def get_zscore_tile_summary(
     )
     try:
         geojson = gcs.download_json(gcs_path)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Summary not found: {str(e)}")
+    except Exception:
+        # Consider logging the full exception 'e' here for debugging purposes.
+        raise HTTPException(status_code=404, detail="Summary not found")
 
     return geojson
 
