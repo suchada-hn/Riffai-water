@@ -41,6 +41,15 @@ class GCSService:
         blob = bucket.blob(blob_path)
         content = blob.download_as_text()
         return json.loads(content)
+
+    def download_bytes(self, gcs_path: str) -> bytes:
+        if not self.client:
+            print(f"[GCS Mock] Download bytes: {gcs_path}")
+            return b""
+        bucket_name, blob_path = self._parse_gcs_path(gcs_path)
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(blob_path)
+        return blob.download_as_bytes()
     
     def get_signed_url(self, gcs_path: str, expiration_hours: int = 1) -> str:
         if not gcs_path or not self.client:

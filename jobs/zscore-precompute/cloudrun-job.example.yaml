@@ -1,0 +1,24 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: zscore-precompute
+spec:
+  template:
+    template:
+      containers:
+        - image: gcr.io/riffai-platform/zscore-precompute:latest
+          env:
+            - name: GCP_PROJECT_ID
+              value: riffai-platform
+            - name: ONWR_DATA_BUCKET
+              value: onwr-data
+            - name: REGION
+              value: EastCoast
+            - name: DATE
+              value: "2025-01-15"
+            - name: ZOOM_MIN
+              value: "6"
+            - name: ZOOM_MAX
+              value: "12"
+      maxRetries: 1
+      timeoutSeconds: 3600

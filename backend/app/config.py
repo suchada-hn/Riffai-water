@@ -20,6 +20,23 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str = "riffai-platform"
     GCS_BUCKET_SATELLITE: str = "riffai-satellite-data"
     GCS_BUCKET_AI_MODELS: str = "riffai-ai-models"
+
+    # ONWR / Z-Score data (private tiles proxied by backend)
+    ONWR_DATA_BUCKET: str = "onwr-data"
+    ZSCORE_VV_INPUT_PREFIX: str = "Model_Output"
+    ZSCORE_VV_TILES_PREFIX: str = "tiles/zscore_vv"
+    ZSCORE_VV_SUMMARY_PREFIX: str = "summary/zscore_vv"
+    ZSCORE_VV_INDEX_PREFIX: str = "index/zscore_vv"
+    ZSCORE_VV_TILE_FORMAT: str = "png"  # png only for now
+    ZSCORE_VV_ZOOM_MIN: int = 6
+    ZSCORE_VV_ZOOM_MAX: int = 12
+
+    # Map platform basin IDs -> ONWR region folders
+    ZSCORE_REGION_BY_BASIN_ID: dict = {
+        "mekong_north": "UpperMekong",
+        "eastern_coast": "EastCoast",
+        "southern_east": "LowerSouthEast",
+    }
     
     # Auth
     SECRET_KEY: str = "your-secret-key-change-in-production"

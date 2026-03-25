@@ -1,0 +1,7 @@
+rasterio
+rio-tiler
+mercantile
+numpy
+pillow
+google-cloud-storage
+shapely

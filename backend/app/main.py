@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.models.database import engine, Base, async_session
 from app.models.models import Basin
-from app.api.endpoints import auth, dashboard, map, data, alerts, prediction, reports, pipeline, batch, tiles, tambon
+from app.api.endpoints import auth, dashboard, map, data, alerts, prediction, reports, pipeline, batch, tiles, tambon, zscore
 
 settings = get_settings()
 
@@ -59,6 +59,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["🔐 Auth"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["📊 Dashboard"])
 app.include_router(map.router, prefix="/api/map", tags=["🗺️ Map & GIS"])
 app.include_router(tiles.router, prefix="/api/map", tags=["🗺️ Map & GIS"])
+app.include_router(zscore.router, prefix="/api/map", tags=["🗺️ Map & GIS"])
 app.include_router(tambon.router, prefix="/api/flood", tags=["🌊 Tambon Flood Prediction"])
 app.include_router(prediction.router, prefix="/api/predict", tags=["🤖 Prediction"])
 app.include_router(batch.router, prefix="/api/predict", tags=["🤖 Batch Prediction"])
