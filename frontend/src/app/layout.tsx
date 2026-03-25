@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
-"use client";
 import { ChakraProvider } from "@chakra-ui/react";
 import { theme } from "@/theme";
 import AlertCenter from "@/components/alerts/AlertCenter";
