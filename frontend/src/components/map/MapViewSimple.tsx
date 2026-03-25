@@ -69,6 +69,7 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    waterBorder: boolean;
   };
 }
 
@@ -124,6 +125,15 @@ export default function MapViewSimple({
         <TileHeatmap
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
+        />
+      )}
+
+      {/* ONWR Water Border raster */}
+      {layers.waterBorder && (
+        <TileLayer
+          url="https://tiles.riffai.com/onwr-water-border/{z}/{x}/{y}.png"
+          attribution="&copy; ONWR"
+          opacity={0.6}
         />
       )}
 

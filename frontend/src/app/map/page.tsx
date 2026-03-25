@@ -38,6 +38,7 @@ function MapContent() {
     satellite: false,
     floodDepth: false,
     rainfall: true,
+    waterBorder: false,
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
@@ -131,6 +132,7 @@ function MapContent() {
               { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
               { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
               { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
+              { key: "waterBorder" as const, label: "ONWR Water Border", description: "Basemap overlay from ONWR GeoTIFF" },
               { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
             ].map(({ key, label, description }) => (
               <label

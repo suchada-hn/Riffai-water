@@ -127,6 +127,8 @@ interface MapViewProps {
     satellite: boolean;
     floodDepth: boolean;
     rainfall: boolean;
+    waterBorder: boolean;
+    waterBorder: boolean;
   };
 }
 
@@ -187,6 +189,16 @@ export default function MapView({
       <ScaleControl position="bottomleft" imperial={false} />
 
       {flyCenter && <FlyTo center={flyCenter} zoom={8} />}
+
+      {/* ONWR Water Border raster */}
+      {layers.waterBorder && (
+        <TileLayer
+          url="https://tiles.riffai.com/onwr-water-border/{z}/{x}/{y}.png"
+          attribution="&copy; ONWR"
+          opacity={0.6}
+        />
+      )
+      }
 
       {/* Basin boundaries */}
       {layers.basins && basins && (
