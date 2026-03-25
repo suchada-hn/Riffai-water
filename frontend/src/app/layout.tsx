@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import AlertCenter from "@/components/alerts/AlertCenter";
 import "./globals.css";
-import { Geist } from "next/font/google";
-import { cn } from "@/lib/utils";
+// IBM Plex fonts imported globally via CSS; remove Geist
+// cn utility not needed after font removal
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+// Geist font removed
 
 export const metadata: Metadata = {
   title: "RIFFAI — AI-Powered Water Management System",
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="th" className={cn("font-sans", geist.variable)}>
+    <html lang="th" className="font-mono">
       <body className="font-sans">
         <Toaster
           position="top-right"
