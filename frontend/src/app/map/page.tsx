@@ -41,7 +41,12 @@ function MapContent() {
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
+    zscoreOverlay: false,
+    zscoreTimelapse: false,
+    zscoreSummary: false,
   });
+  const [zscoreDate, setZscoreDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [zscoreOpacity, setZscoreOpacity] = useState<number>(0.7);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
@@ -125,6 +130,9 @@ function MapContent() {
               { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
               { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
               { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
+              { key: "zscoreOverlay" as const, label: "Z-score (VV) Overlay", description: "Single-date SAR Z-score raster" },
+              { key: "zscoreTimelapse" as const, label: "Z-score (VV) Timelapse", description: "Animate available Z-score dates" },
+              { key: "zscoreSummary" as const, label: "Z-score (VV) Summary Grid", description: "Per-tile statistics (GeoJSON)" },
               { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
               { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
               { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
@@ -151,6 +159,46 @@ function MapContent() {
             ))}
           </div>
         </div>
+
+        {/* Z-score controls */}
+        {(layers.zscoreOverlay || layers.zscoreTimelapse || layers.zscoreSummary) && (
+          <div className="mb-6 p-4 bg-white border border-primary-200 rounded-mono">
+            <div className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-3">
+              Z-score Controls
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-primary-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={zscoreDate}
+                  onChange={(e) => setZscoreDate(e.target.value)}
+                  className="input-mono text-sm"
+                />
+                <div className="text-[11px] text-primary-500 font-mono mt-1">
+                  Uses available dates when timelapse is enabled
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-primary-700">Opacity</label>
+                  <span className="text-xs font-bold text-primary-700 font-mono">
+                    {Math.round(zscoreOpacity * 100)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(zscoreOpacity * 100)}
+                  onChange={(e) => setZscoreOpacity(Number(e.target.value) / 100)}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Legend */}
         <div className="mb-6">
@@ -323,6 +371,8 @@ function MapContent() {
           dams={dams}
           selectedBasin={selectedBasin}
           layers={layers}
+          zscoreDate={zscoreDate}
+          zscoreOpacity={zscoreOpacity}
         />
         
         {/* Tambon Flood Layer */}

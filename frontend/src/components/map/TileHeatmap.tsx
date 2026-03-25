@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GeoJSON, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
+import { mapAPI } from "@/services/api";
 
 interface TileStats {
   avgWaterLevel: number;
@@ -41,6 +42,9 @@ interface TileFeature {
 interface TileHeatmapProps {
   visible: boolean;
   onTileClick?: (tile: TileProperties) => void;
+  mode?: "risk" | "zscore";
+  basinId?: string | null;
+  zscoreDate?: string; // YYYY-MM-DD
 }
 
 const RISK_COLORS: Record<string, string> = {
@@ -59,7 +63,15 @@ const RISK_LABELS: Record<string, string> = {
   critical: "วิกฤต",
 };
 
-export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+export default function TileHeatmap({
+  visible,
+  onTileClick,
+  mode = "risk",
+  basinId,
+  zscoreDate,
+}: TileHeatmapProps) {
   const [tiles, setTiles] = useState<TileFeature[]>([]);
   const [selectedTile, setSelectedTile] = useState<TileProperties | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,14 +81,37 @@ export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) 
     if (visible) {
       loadTiles();
     }
-  }, [visible]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, mode, basinId, zscoreDate]);
+
+  const isZScore = mode === "zscore";
+
+  const zscoreLegend = useMemo(() => {
+    if (!isZScore) return null;
+    return {
+      title: "Z-score (VV)",
+      clamp: [-3, 3],
+      note: "Per-tile summary from raster",
+    };
+  }, [isZScore]);
 
   const loadTiles = async () => {
     try {
       setLoading(true);
-      const response = await fetch("http://localhost:8000/api/map/tiles");
-      const data = await response.json();
-      setTiles(data.features || []);
+      if (!isZScore) {
+        const response = await fetch(`${API_URL}/api/map/tiles`);
+        const data = await response.json();
+        setTiles(data.features || []);
+        return;
+      }
+
+      if (!basinId || !zscoreDate) {
+        setTiles([]);
+        return;
+      }
+
+      const res = await mapAPI.zscoreTileSummary(basinId, zscoreDate);
+      setTiles(res.data?.features || []);
     } catch (error) {
       console.error("Failed to load tiles:", error);
     } finally {
@@ -85,12 +120,28 @@ export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) 
   };
 
   const getTileStyle = (feature: TileFeature) => {
-    const riskLevel = feature.properties.riskLevel;
-    const color = RISK_COLORS[riskLevel] || "#94a3b8";
+    if (!isZScore) {
+      const riskLevel = feature.properties.riskLevel;
+      const color = RISK_COLORS[riskLevel] || "#94a3b8";
+      return {
+        fillColor: color,
+        fillOpacity: 0.5,
+        color: color,
+        weight: 1,
+        opacity: 0.8,
+      };
+    }
+
+    const value = (feature.properties as any)?.z_mean;
+    const clamped = Math.max(-3, Math.min(3, typeof value === "number" ? value : 0));
+    const t = (clamped + 3) / 6; // 0..1
+    // simple diverging grayscale for now; raster tiles carry real palette
+    const c = Math.round(255 * (1 - t));
+    const color = `rgb(${c},${c},${c})`;
     
     return {
       fillColor: color,
-      fillOpacity: 0.5,
+      fillOpacity: 0.35,
       color: color,
       weight: 1,
       opacity: 0.8,
@@ -127,19 +178,34 @@ export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) 
     });
 
     // Tooltip on hover
+    if (!isZScore) {
+      layer.bindTooltip(
+        `
+        <div class="text-xs">
+          <div class="font-bold text-sm mb-1">${RISK_LABELS[props.riskLevel]}</div>
+          <div>💧 ${props.stats.avgWaterLevel.toFixed(1)} ม.</div>
+          <div>🌧️ ${props.stats.rainfall24h.toFixed(0)} มม.</div>
+          <div>📍 ${props.provinces.join(", ")}</div>
+        </div>
+        `,
+        {
+          sticky: true,
+          className: "tile-tooltip",
+        }
+      );
+      return;
+    }
+
+    const zMean = (props as any)?.z_mean;
     layer.bindTooltip(
       `
       <div class="text-xs">
-        <div class="font-bold text-sm mb-1">${RISK_LABELS[props.riskLevel]}</div>
-        <div>💧 ${props.stats.avgWaterLevel.toFixed(1)} ม.</div>
-        <div>🌧️ ${props.stats.rainfall24h.toFixed(0)} มม.</div>
-        <div>📍 ${props.provinces.join(", ")}</div>
+        <div class="font-bold text-sm mb-1">Z-score (VV)</div>
+        <div>Mean: <span class="font-mono">${typeof zMean === "number" ? zMean.toFixed(3) : "-"}</span></div>
+        <div>Date: <span class="font-mono">${zscoreDate || "-"}</span></div>
       </div>
       `,
-      {
-        sticky: true,
-        className: "tile-tooltip",
-      }
+      { sticky: true, className: "tile-tooltip" }
     );
   };
 
@@ -147,6 +213,14 @@ export default function TileHeatmap({ visible, onTileClick }: TileHeatmapProps) 
 
   return (
     <>
+      {isZScore && zscoreLegend && (
+        <div className="absolute top-4 right-4 z-[1000] bg-white rounded-lg shadow-lg px-3 py-2 text-xs">
+          <div className="font-semibold">{zscoreLegend.title}</div>
+          <div className="text-gray-600 font-mono mt-0.5">
+            clamp [{zscoreLegend.clamp[0]}, {zscoreLegend.clamp[1]}]
+          </div>
+        </div>
+      )}
       <GeoJSON
         data={{ type: "FeatureCollection", features: tiles } as any}
         style={getTileStyle as any}

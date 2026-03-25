@@ -14,6 +14,7 @@ import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
+import TimelapseZScoreLayer from "./TimelapseZScoreLayer";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -59,6 +60,8 @@ interface MapViewProps {
   rivers?: GeoJSONFeatureCollection | null;
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
+  zscoreDate?: string; // YYYY-MM-DD
+  zscoreOpacity?: number; // 0..1
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -69,6 +72,9 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    zscoreOverlay: boolean;
+    zscoreTimelapse: boolean;
+    zscoreSummary: boolean;
   };
 }
 
@@ -84,10 +90,20 @@ export default function MapViewSimple({
   rivers,
   dams,
   selectedBasin,
+  zscoreDate,
+  zscoreOpacity = 0.7,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
   const [selectedTile, setSelectedTile] = useState<any>(null);
+  const [zscoreYear, setZscoreYear] = useState<number>(() => new Date().getFullYear());
+
+  useEffect(() => {
+    if (zscoreDate) {
+      const y = Number(zscoreDate.slice(0, 4));
+      if (!Number.isNaN(y)) setZscoreYear(y);
+    }
+  }, [zscoreDate]);
 
   // Dam icon
   const damIcon = L.divIcon({
@@ -110,8 +126,27 @@ export default function MapViewSimple({
 
       {flyCenter && <FlyTo center={flyCenter} zoom={8} />}
 
+      {/* Z-score VV timelapse (raster) */}
+      {layers.zscoreTimelapse && selectedBasin && (
+        <TimelapseZScoreLayer
+          visible={layers.zscoreTimelapse}
+          basinId={selectedBasin}
+          year={zscoreYear}
+          opacity={zscoreOpacity}
+        />
+      )}
+
+      {/* Z-score VV single-date overlay (raster) */}
+      {layers.zscoreOverlay && !layers.zscoreTimelapse && selectedBasin && zscoreDate && (
+        <TileLayer
+          url={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/map/zscore/vv/tiles/${selectedBasin}/${zscoreDate.slice(0, 4)}/${zscoreDate.slice(5, 7)}/${zscoreDate.slice(8, 10)}/{z}/{x}/{y}.png`}
+          opacity={zscoreOpacity}
+          zIndex={450}
+        />
+      )}
+
       {/* Time-lapse Animation */}
-      {layers.timelapse && (
+      {layers.timelapse && !layers.zscoreTimelapse && (
         <TimelapseHeatmap
           visible={layers.timelapse}
           startDate={new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
@@ -120,10 +155,20 @@ export default function MapViewSimple({
       )}
 
       {/* Tile Heatmap */}
-      {!layers.timelapse && layers.heatmap && (
+      {!layers.timelapse && !layers.zscoreTimelapse && layers.heatmap && (
         <TileHeatmap
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
+        />
+      )}
+
+      {/* Z-score summary grid (vector) */}
+      {layers.zscoreSummary && !layers.zscoreTimelapse && selectedBasin && zscoreDate && (
+        <TileHeatmap
+          visible={layers.zscoreSummary}
+          mode="zscore"
+          basinId={selectedBasin}
+          zscoreDate={zscoreDate}
         />
       )}
 

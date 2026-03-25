@@ -54,6 +54,12 @@ export const mapAPI = {
     api.get(`/api/map/tiles/${tileId}/history`, { params: { days } }),
   tileSatellite: (tileId: string) =>
     api.get(`/api/map/tiles/${tileId}/satellite`),
+
+  // Z-score VV (GCS-only, tiles proxied by backend)
+  zscoreDates: (basinId: string, year: number) =>
+    api.get("/api/map/zscore/vv/dates", { params: { basin_id: basinId, year } }),
+  zscoreTileSummary: (basinId: string, date: string) =>
+    api.get("/api/map/zscore/vv/summary/tiles", { params: { basin_id: basinId, date } }),
 };
 
 // ═══════════ Prediction ═══════════
