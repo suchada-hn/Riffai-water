@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import AlertCenter from "@/components/alerts/AlertCenter";
 import "./globals.css";
+// IBM Plex fonts imported globally via CSS; remove Geist
+// cn utility not needed after font removal
+
+// Geist font removed
 
 export const metadata: Metadata = {
   title: "RIFFAI — AI-Powered Water Management System",
@@ -16,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="th">
+    <html lang="th" className="font-mono">
       <body className="font-sans">
         <Toaster
           position="top-right"
