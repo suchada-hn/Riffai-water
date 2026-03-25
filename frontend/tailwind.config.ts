@@ -1,48 +1,46 @@
-import type { Config } from "tailwindcss";
-
+import type { Config } from 'tailwindcss'
 const config: Config = {
-  content: [
-    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-  ],
+  darkMode: false,
+  content: ['./src/**/*.{js,ts,jsx,tsx,mdx}'],
   theme: {
     extend: {
       colors: {
-        // Monochrome Theme - Black & White Only
-        primary: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-          200: '#e5e5e5',
-          300: '#d4d4d4',
-          400: '#a3a3a3',
-          500: '#737373',
-          600: '#525252',
-          700: '#404040',
-          800: '#262626',
-          900: '#171717',
-          950: '#0a0a0a',
-        },
-        accent: {
-          light: '#ffffff',
-          DEFAULT: '#000000',
-          dark: '#0a0a0a',
-        },
+        black: '#000000',
+        white: '#FFFFFF',
+        red: { DEFAULT: '#FF0000', 500: '#FF0000' },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Consolas', 'monospace'],
+        mono: ['IBM Plex Mono', 'monospace'],
+        thai: ['IBM Plex Sans Thai', 'sans-serif'],
+        sans: ['IBM Plex Mono', 'monospace'],
       },
-      boxShadow: {
-        'mono': '0 2px 8px rgba(0, 0, 0, 0.08)',
-        'mono-lg': '0 4px 16px rgba(0, 0, 0, 0.12)',
-        'mono-xl': '0 8px 32px rgba(0, 0, 0, 0.16)',
+      fontSize: {
+        xs: ['11px', { lineHeight: '16px', letterSpacing: '0.08em' }],
+        sm: ['13px', { lineHeight: '20px', letterSpacing: '0.04em' }],
+        base: ['16px', { lineHeight: '24px', letterSpacing: '0' }],
+        lg: ['20px', { lineHeight: '28px', letterSpacing: '-0.01em' }],
+        xl: ['28px', { lineHeight: '36px', letterSpacing: '-0.02em' }],
+        '2xl': ['40px', { lineHeight: '48px', letterSpacing: '-0.03em' }],
+        '3xl': ['56px', { lineHeight: '64px', letterSpacing: '-0.04em' }],
+      },
+      spacing: {
+        '1': '8px', '2': '16px', '3': '24px', '4': '32px',
+        '5': '40px', '6': '48px', '8': '64px', '10': '80px',
+        '12': '96px', '16': '128px', '20': '160px', '24': '192px',
       },
       borderRadius: {
-        'mono': '2px',
+        DEFAULT: '0px', none: '0px', sm: '0px', md: '0px', lg: '0px', xl: '0px', full: '0px',
       },
+      boxShadow: {
+        brutal: '4px 4px 0px 0px #000000',
+        'brutal-sm': '2px 2px 0px 0px #000000',
+        'brutal-red': '4px 4px 0px 0px #FF0000',
+        none: 'none',
+      },
+      transitionDuration: { DEFAULT: '80ms' },
+      transitionTimingFunction: { DEFAULT: 'linear' },
     },
   },
-  plugins: [],
-};
-export default config;
+  plugins: [require('tailwindcss-animate')],
+}
+export default config
