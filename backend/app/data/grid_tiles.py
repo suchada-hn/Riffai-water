@@ -2,7 +2,6 @@
 Grid-based tile system for Thailand flood risk heatmap
 Divides Thailand into ~50km x 50km tiles (0.5° x 0.5°)
 """
-import random
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 
@@ -122,6 +121,59 @@ def get_tile_bounds(lat: float, lon: float) -> List[List[float]]:
     ]
 
 
+def iter_thailand_tile_origins() -> List[tuple]:
+    """
+    Iterate over tile origin coordinates (SW corner) that are inside Thailand.
+
+    Returns list of (lat, lon).
+    """
+    coords: List[tuple] = []
+    lat = THAILAND_BOUNDS["lat_min"]
+    while lat < THAILAND_BOUNDS["lat_max"]:
+        lon = THAILAND_BOUNDS["lon_min"]
+        while lon < THAILAND_BOUNDS["lon_max"]:
+            if is_tile_in_thailand(lat, lon):
+                coords.append((round(lat, 1), round(lon, 1)))
+            lon += TILE_SIZE
+        lat += TILE_SIZE
+    return coords
+
+
+def tile_polygon_coordinates(lat: float, lon: float) -> List[List[List[float]]]:
+    """
+    GeoJSON Polygon coordinates for the tile.
+    Input: tile origin (SW corner) in degrees.
+    Output: GeoJSON coordinates in [lon, lat] order.
+    """
+    bounds = get_tile_bounds(lat, lon)
+    (sw_lat, sw_lon), (ne_lat, ne_lon) = bounds
+    return [[
+        [sw_lon, sw_lat],
+        [ne_lon, sw_lat],
+        [ne_lon, ne_lat],
+        [sw_lon, ne_lat],
+        [sw_lon, sw_lat],
+    ]]
+
+
+def generate_tile_geometries() -> List[Dict[str, Any]]:
+    """
+    Generate tile geometry skeletons (no simulated stats).
+    """
+    tiles: List[Dict[str, Any]] = []
+    for lat, lon in iter_thailand_tile_origins():
+        tiles.append({
+            "id": generate_tile_id(lat, lon),
+            "bounds": get_tile_bounds(lat, lon),
+            "center": [lat + TILE_SIZE / 2, lon + TILE_SIZE / 2],
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": tile_polygon_coordinates(lat, lon),
+            },
+        })
+    return tiles
+
+
 def calculate_risk_level(water_level: float, rainfall: float) -> str:
     """Calculate risk level based on water level and rainfall"""
     if water_level > 4.5 or rainfall > 150:
@@ -151,37 +203,25 @@ def generate_thailand_tiles() -> List[Dict[str, Any]]:
             
             tile_id = generate_tile_id(lat, lon)
             
-            # Simulate data (in production, this would query real data)
-            avg_water_level = random.uniform(2.5, 5.0)
-            rainfall_24h = random.uniform(0, 180)
-            station_count = random.randint(0, 5)
-            population_at_risk = random.randint(0, 50000) if station_count > 0 else 0
-            
-            risk_level = calculate_risk_level(avg_water_level, rainfall_24h)
-            
-            # Get provinces for this tile
-            provinces = TILE_PROVINCES.get(tile_id, ["ไม่ระบุ"])
-            
+            # Keep legacy API for backward compatibility but do not fabricate metrics here.
+            # The real, DB-backed implementation lives in backend/app/api/endpoints/tiles.py
             tile = {
                 "id": tile_id,
                 "bounds": get_tile_bounds(lat, lon),
                 "center": [lat + TILE_SIZE/2, lon + TILE_SIZE/2],
-                "riskLevel": risk_level,
+                "riskLevel": "safe",
                 "stats": {
-                    "avgWaterLevel": round(avg_water_level, 2),
-                    "rainfall24h": round(rainfall_24h, 1),
-                    "stationCount": station_count,
-                    "populationAtRisk": population_at_risk,
-                    "trend": random.choice(["up", "down", "stable"]),
-                    "trendPercent": round(random.uniform(-20, 25), 1),
+                    "avgWaterLevel": 0.0,
+                    "rainfall24h": 0.0,
+                    "stationCount": 0,
+                    "populationAtRisk": 0,
+                    "trend": "stable",
+                    "trendPercent": 0.0,
                 },
-                "provinces": provinces,
+                "provinces": TILE_PROVINCES.get(tile_id, ["ไม่ระบุ"]),
                 "rivers": [],
                 "dams": [],
-                "aiPrediction": {
-                    "floodProbability": round(random.uniform(0, 100), 1) if risk_level in ["warning", "critical"] else round(random.uniform(0, 40), 1),
-                    "daysAhead": random.randint(1, 5),
-                },
+                "aiPrediction": {"floodProbability": 0.0, "daysAhead": 1},
                 "lastUpdate": datetime.now().isoformat(),
             }
             

@@ -48,11 +48,11 @@ interface TileHeatmapProps {
 }
 
 const RISK_COLORS: Record<string, string> = {
-  safe: "#10b981",      // green-500
-  normal: "#84cc16",    // lime-500
-  watch: "#eab308",     // yellow-500
-  warning: "#f97316",   // orange-500
-  critical: "#ef4444",  // red-500
+  safe: "#10b981", // green-500
+  normal: "#84cc16", // lime-500
+  watch: "#eab308", // yellow-500
+  warning: "#f97316", // orange-500
+  critical: "#ef4444", // red-500
 };
 
 const RISK_LABELS: Record<string, string> = {
@@ -133,12 +133,15 @@ export default function TileHeatmap({
     }
 
     const value = (feature.properties as any)?.z_mean;
-    const clamped = Math.max(-3, Math.min(3, typeof value === "number" ? value : 0));
+    const clamped = Math.max(
+      -3,
+      Math.min(3, typeof value === "number" ? value : 0),
+    );
     const t = (clamped + 3) / 6; // 0..1
     // simple diverging grayscale for now; raster tiles carry real palette
     const c = Math.round(255 * (1 - t));
     const color = `rgb(${c},${c},${c})`;
-    
+
     return {
       fillColor: color,
       fillOpacity: 0.35,
@@ -150,7 +153,7 @@ export default function TileHeatmap({
 
   const onEachFeature = (feature: TileFeature, layer: L.Layer) => {
     const props = feature.properties;
-    
+
     // Hover effect
     layer.on({
       mouseover: (e) => {
@@ -191,7 +194,7 @@ export default function TileHeatmap({
         {
           sticky: true,
           className: "tile-tooltip",
-        }
+        },
       );
       return;
     }
@@ -205,7 +208,7 @@ export default function TileHeatmap({
         <div>Date: <span class="font-mono">${zscoreDate || "-"}</span></div>
       </div>
       `,
-      { sticky: true, className: "tile-tooltip" }
+      { sticky: true, className: "tile-tooltip" },
     );
   };
 
@@ -241,7 +244,9 @@ export default function TileHeatmap({
                 </h3>
                 <span
                   className="px-2 py-1 rounded text-xs font-bold text-white"
-                  style={{ backgroundColor: RISK_COLORS[selectedTile.riskLevel] }}
+                  style={{
+                    backgroundColor: RISK_COLORS[selectedTile.riskLevel],
+                  }}
                 >
                   {selectedTile.riskLevel.toUpperCase()}
                 </span>
@@ -267,17 +272,25 @@ export default function TileHeatmap({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">📈 แนวโน้ม</span>
-                <span className={`font-bold ${
-                  selectedTile.stats.trend === "up" ? "text-red-600" :
-                  selectedTile.stats.trend === "down" ? "text-green-600" :
-                  "text-gray-600"
-                }`}>
-                  {selectedTile.stats.trend === "up" ? "↗️" :
-                   selectedTile.stats.trend === "down" ? "↘️" : "→"}
-                  {" "}
-                  {selectedTile.stats.trend === "up" ? "เพิ่มขึ้น" :
-                   selectedTile.stats.trend === "down" ? "ลดลง" : "คงที่"}
-                  {" "}
+                <span
+                  className={`font-bold ${
+                    selectedTile.stats.trend === "up"
+                      ? "text-red-600"
+                      : selectedTile.stats.trend === "down"
+                        ? "text-green-600"
+                        : "text-gray-600"
+                  }`}
+                >
+                  {selectedTile.stats.trend === "up"
+                    ? "↗️"
+                    : selectedTile.stats.trend === "down"
+                      ? "↘️"
+                      : "→"}{" "}
+                  {selectedTile.stats.trend === "up"
+                    ? "เพิ่มขึ้น"
+                    : selectedTile.stats.trend === "down"
+                      ? "ลดลง"
+                      : "คงที่"}{" "}
                   {Math.abs(selectedTile.stats.trendPercent)}%
                 </span>
               </div>
@@ -306,7 +319,8 @@ export default function TileHeatmap({
                   <div className="flex-1">
                     <div className="text-xs text-gray-600">AI Prediction</div>
                     <div className="font-bold text-purple-700">
-                      {selectedTile.aiPrediction.floodProbability.toFixed(0)}% โอกาสน้ำท่วม
+                      {selectedTile.aiPrediction.floodProbability.toFixed(0)}%
+                      โอกาสน้ำท่วม
                     </div>
                     <div className="text-xs text-gray-500">
                       ใน {selectedTile.aiPrediction.daysAhead} วันข้างหน้า

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, TrendingUp, TrendingDown, Minus, AlertTriangle, Satellite } from "lucide-react";
 import SatelliteVisualization from "./SatelliteVisualization";
+import { mapAPI } from "@/services/api";
 
 interface TileStats {
   avgWaterLevel: number;
@@ -73,9 +74,25 @@ export default function TileDetailPanel({ tile, onClose }: TileDetailPanelProps)
     
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:8000/api/map/tiles/${tile.id}/history?days=7`);
-      const data = await response.json();
-      setHistory(data.history || []);
+      // Backend no longer serves simulated tile history. Keep UI working by deriving
+      // a 7-day history from the date-driven tiles endpoint.
+      const days = 7;
+      const today = new Date();
+      const historyItems: HistoryData[] = [];
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(today.getTime() - i * 24 * 60 * 60 * 1000);
+        const day = d.toISOString().slice(0, 10);
+        const res = await mapAPI.tiles({ date: day });
+        const feature = (res.data.features || []).find((f: any) => f?.properties?.id === tile.id);
+        if (!feature) continue;
+        historyItems.push({
+          date: d.toISOString(),
+          avgWaterLevel: feature.properties.stats.avgWaterLevel,
+          rainfall24h: feature.properties.stats.rainfall24h,
+          riskLevel: feature.properties.riskLevel,
+        });
+      }
+      setHistory(historyItems);
     } catch (error) {
       console.error("Failed to load history:", error);
     } finally {

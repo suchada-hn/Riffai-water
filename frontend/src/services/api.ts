@@ -36,6 +36,7 @@ export const dashboardAPI = {
 // ═══════════ Map ═══════════
 export const mapAPI = {
   basins: () => api.get("/api/map/basins"),
+  subbasins: (basinId: string) => api.get("/api/map/subbasins", { params: { basin_id: basinId } }),
   rivers: () => api.get("/api/map/rivers"),
   dams: () => api.get("/api/map/dams"),
   stations: (basinId?: string) =>
@@ -46,9 +47,10 @@ export const mapAPI = {
     api.get(`/api/map/flood-layer/${basinId}`, { params: { date } }),
   satellite: (basinId: string, index = "ndwi") =>
     api.get(`/api/map/satellite/${basinId}`, { params: { index } }),
-  tiles: (riskLevel?: string) =>
-    api.get("/api/map/tiles", { params: { risk_level: riskLevel } }),
-  tilesSummary: () => api.get("/api/map/tiles/summary"),
+  tiles: (params?: { risk_level?: string; basin_id?: string; date?: string }) =>
+    api.get("/api/map/tiles", { params }),
+  tilesSummary: (params?: { basin_id?: string; date?: string }) =>
+    api.get("/api/map/tiles/summary", { params }),
   tile: (tileId: string) => api.get(`/api/map/tiles/${tileId}`),
   tileHistory: (tileId: string, days = 7) =>
     api.get(`/api/map/tiles/${tileId}/history`, { params: { days } }),
