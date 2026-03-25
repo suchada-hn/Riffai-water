@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
+"use client";
+import { ChakraProvider } from "@chakra-ui/react";
+import { theme } from "@/theme";
 import AlertCenter from "@/components/alerts/AlertCenter";
 import "./globals.css";
 
@@ -18,6 +21,7 @@ export default function RootLayout({
   return (
     <html lang="th">
       <body className="font-sans">
+        <ChakraProvider theme={theme}>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -44,7 +48,8 @@ export default function RootLayout({
           }}
         />
         <AlertCenter />
-        {children}
+          {children}
+        </ChakraProvider>
       </body>
     </html>
   );
