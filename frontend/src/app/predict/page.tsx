@@ -11,16 +11,16 @@ import { PredictionResult } from "@/types";
 import toast from "react-hot-toast";
 
 const BASINS = [
-  { id: "mekong_north", name: "Mekong North Basin" },
-  { id: "eastern_coast", name: "Eastern Coast Basin" },
-  { id: "southern_east", name: "Southern East Basin" },
+  { id: "mekong_north", name: "ลุ่มน้ำโขงเหนือ" },
+  { id: "eastern_coast", name: "ลุ่มน้ำชายฝั่งทะเลตะวันออก" },
+  { id: "southern_east", name: "ลุ่มน้ำภาคใต้ฝั่งตะวันออกตอนล่าง" },
 ];
 
 function PredictContent() {
   const searchParams = useSearchParams();
-  const [basinId, setBasinId] = useState(
-    searchParams?.get("basin") || "mekong_north"
-  );
+  const [basinId, setBasinId] = useState<string>(() => {
+    return searchParams?.get("basin") || "mekong_north";
+  });
   const [daysAhead, setDaysAhead] = useState(30);
   const [loading, setLoading] = useState(false);
   const [preparing, setPreparing] = useState(false);
@@ -35,6 +35,10 @@ function PredictContent() {
   }, [basinId, result]);
 
   const prepareAndPredict = async () => {
+    if (!basinId) {
+      toast.error("กรุณาเลือกลุ่มน้ำก่อนรันการทำนาย");
+      return;
+    }
     setPreparing(true);
     try {
       toast.loading("กำลังดึงข้อมูลล่าสุด...", { id: "predict" });
