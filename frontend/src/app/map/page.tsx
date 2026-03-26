@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import LayerToggleRow from "@/components/map/LayerToggleRow";
+import SidebarCard from "@/components/ui/SidebarCard";
 import { useRouter } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
@@ -271,7 +272,7 @@ function MapContent() {
           <div className="mt-6 space-y-3">
             {/* Tile Heatmap Summary */}
             {layers.heatmap && tileSummary && (
-              <div className="p-4 bg-gray-50 border-2 border-gray-200 rounded-mono">
+              <SidebarCard title="Heatmap Summary">
                 <div className="text-xs font-semibold text-black uppercase tracking-wider mb-3">
                   Heatmap Summary
                 </div>
