@@ -120,6 +120,16 @@ export const mapAPI = {
     api.get(`/api/map/tiles/${tileId}/satellite`),
 };
 
+/** ONWR Sentinel-1 zonal stats (pipeline basin names: UpperMekong, EastCoast, LowerSouthEast) */
+export const onwrAPI = {
+  dates: (basinEn: string) =>
+    api.get(`/api/basins/${encodeURIComponent(basinEn)}/dates`),
+  stats: (basinEn: string, date: string) =>
+    api.get(`/api/basins/${encodeURIComponent(basinEn)}/${date}/stats`),
+  floodAlertsLatest: (limit = 200) =>
+    api.get("/api/flood-alerts/latest", { params: { limit } }),
+};
+
 // ═══════════ Prediction ═══════════
 export const predictAPI = {
   flood: (basinId: string, daysAhead = 30) =>

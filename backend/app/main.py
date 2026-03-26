@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.models.database import engine, Base, async_session
 from app.models.models import Basin
-from app.api.endpoints import auth, dashboard, map, data, alerts, prediction, reports, pipeline, batch, tiles, tambon
+from app.api.endpoints import auth, dashboard, map, data, alerts, prediction, reports, pipeline, batch, tiles, tambon, onwr_basins
 
 settings = get_settings()
 
@@ -66,6 +66,7 @@ app.include_router(alerts.router, prefix="/api/alerts", tags=["🚨 Alerts"])
 app.include_router(data.router, prefix="/api/data", tags=["📈 Data & Analytics"])
 app.include_router(reports.router, prefix="/api/reports", tags=["📄 Reports"])
 app.include_router(pipeline.router, prefix="/api/pipeline", tags=["📡 Pipeline"])
+app.include_router(onwr_basins.router, prefix="/api", tags=["ONWR SAR"])
 
 
 @app.get("/")

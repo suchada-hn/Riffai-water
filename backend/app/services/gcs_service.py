@@ -1,6 +1,7 @@
-from google.cloud import storage
-from datetime import timedelta
 import json
+from datetime import timedelta
+
+from google.cloud import storage
 from app.config import get_settings
 
 settings = get_settings()
@@ -60,6 +61,24 @@ class GCSService:
         bucket = self.client.bucket(bucket_name)
         blobs = bucket.list_blobs(prefix=prefix)
         return [blob.name for blob in blobs]
+
+    def download_text(self, bucket_name: str, blob_name: str) -> str:
+        if not self.client:
+            raise RuntimeError("GCS client not available")
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        return blob.download_as_text()
+
+    def blob_exists(self, bucket_name: str, blob_name: str) -> bool:
+        if not self.client:
+            return False
+        bucket = self.client.bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        return blob.exists()
+
+    def download_geojson_dict(self, bucket_name: str, blob_name: str) -> dict:
+        text = self.download_text(bucket_name, blob_name)
+        return json.loads(text)
     
     def _parse_gcs_path(self, gcs_path: str):
         path = gcs_path.replace("gs://", "")

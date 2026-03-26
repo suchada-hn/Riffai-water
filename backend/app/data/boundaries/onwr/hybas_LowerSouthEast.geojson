@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"type":"Feature","properties":{"HYBAS_ID":6080950001,"NAME":"Lower south-east placeholder"},
+   "geometry":{"type":"Polygon","coordinates":[[[100.8,6.2],[101.05,6.2],[101.05,6.45],[100.8,6.45],[100.8,6.2]]]}}
+]}

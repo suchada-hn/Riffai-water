@@ -59,6 +59,7 @@ interface MapViewProps {
   rivers?: GeoJSONFeatureCollection | null;
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
+  onwrSarGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -69,7 +70,32 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    onwrSar: boolean;
   };
+}
+
+function lerpChannel(a: number, b: number, t: number) {
+  return Math.round(a + (b - a) * Math.min(1, Math.max(0, t)));
+}
+
+/** Blue (z &lt; -3) → yellow (~0) → red (z &gt; 3) */
+export function zScoreChoroplethColor(z: number | null | undefined): string {
+  if (z == null || Number.isNaN(Number(z))) return "#94a3b8";
+  const v = Number(z);
+  if (v <= -3) return "#1e40af";
+  if (v >= 3) return "#b91c1c";
+  if (v < 0) {
+    const t = (v + 3) / 3;
+    const r = lerpChannel(30, 250, t);
+    const g = lerpChannel(64, 204, t);
+    const b = lerpChannel(175, 21, t);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = v / 3;
+  const r = lerpChannel(250, 185, t);
+  const g = lerpChannel(204, 28, t);
+  const b = lerpChannel(21, 28, t);
+  return `rgb(${r},${g},${b})`;
 }
 
 const BASIN_CENTERS: Record<string, [number, number]> = {
@@ -84,6 +110,7 @@ export default function MapViewSimple({
   rivers,
   dams,
   selectedBasin,
+  onwrSarGeoJSON,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -211,6 +238,38 @@ export default function MapViewSimple({
           </Marker>
         );
       })}
+
+      {/* ONWR SAR sub-basin z-score choropleth */}
+      {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (
+        <GeoJSON
+          key={`onwr-${onwrSarGeoJSON.features.length}-${onwrSarGeoJSON.properties?.date ?? ""}`}
+          data={onwrSarGeoJSON}
+          style={(feature) => {
+            const z = feature?.properties?.mean_z_score as number | undefined;
+            const fill = zScoreChoroplethColor(z);
+            return {
+              color: "#1e3a8a",
+              weight: 1,
+              fillColor: fill,
+              fillOpacity: 0.55,
+            };
+          }}
+          onEachFeature={(feature, layer) => {
+            const p = feature.properties || {};
+            const z = p.mean_z_score;
+            const flood = p.flood_detected ? "Yes" : "No";
+            layer.bindPopup(`
+              <div class="text-sm min-w-[200px]">
+                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
+                <div>${p.NAME || p.name || ""}</div>
+                <div class="font-mono text-xs mt-1">Date: ${p.date ?? "—"}</div>
+                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
+                <div class="font-mono text-xs">Flood flag: <strong>${flood}</strong></div>
+              </div>
+            `);
+          }}
+        />
+      )}
 
       {/* Basin boundaries */}
       {layers.basins && basins && (
