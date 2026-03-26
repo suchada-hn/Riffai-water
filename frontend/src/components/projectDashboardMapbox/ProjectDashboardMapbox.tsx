@@ -287,6 +287,28 @@ export default function ProjectDashboardMapbox({
           zoom: map.getZoom(),
         });
         // #endregion
+
+        // #region agent log
+        try {
+          const el = containerRef.current;
+          const canvas = map.getCanvas();
+          const r = el?.getBoundingClientRect?.();
+          const cs = el ? window.getComputedStyle(el) : null;
+          const ccs = canvas ? window.getComputedStyle(canvas) : null;
+          __dbg("H_VIS", "container/canvas computed style", {
+            rect: r ? { w: r.width, h: r.height, x: r.x, y: r.y } : null,
+            container: cs
+              ? { display: cs.display, visibility: cs.visibility, opacity: cs.opacity, zIndex: cs.zIndex, position: cs.position }
+              : null,
+            canvas: ccs
+              ? { display: ccs.display, visibility: ccs.visibility, opacity: ccs.opacity }
+              : null,
+            overlayNodes: document.querySelectorAll(".bg-white\\/70").length,
+          });
+        } catch (e: any) {
+          __dbg("H_VIS", "container/canvas computed style error", { message: String(e?.message ?? e ?? "unknown") });
+        }
+        // #endregion
       });
 
       map.on("error", (evt: any) => {
@@ -327,6 +349,26 @@ export default function ProjectDashboardMapbox({
       canvas.addEventListener("webglcontextrestored", onRestored as any, { passive: true } as any);
 
       mapRef.current = map;
+
+      // React 18 StrictMode mounts/unmounts components twice in dev.
+      // If we don't clean up the map instance, Mapbox can end up bound to a stale
+      // DOM node and render as a blank/white canvas.
+      return () => {
+        try {
+          canvas.removeEventListener("webglcontextlost", onLost as any);
+          canvas.removeEventListener("webglcontextrestored", onRestored as any);
+        } catch {
+          // ignore
+        }
+        try {
+          map.remove();
+        } catch {
+          // ignore
+        }
+        mapRef.current = null;
+        sourcesAddedRef.current = false;
+        setMapLoaded(false);
+      };
     } catch {
       setMapError("Failed to initialize Mapbox. Check your token and Mapbox access.");
       // #region agent log
