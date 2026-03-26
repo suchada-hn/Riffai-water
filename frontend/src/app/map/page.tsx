@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import { useRouter } from "next/navigation";
+import ProjectDashboardMapbox from "@/components/projectDashboardMapbox/ProjectDashboardMapbox";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -24,6 +25,7 @@ const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
 function MapContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [mode, setMode] = useState<"leaflet" | "project">("leaflet");
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
@@ -76,8 +78,8 @@ function MapContent() {
   };
 
   useEffect(() => {
-    loadMapData();
-  }, [selectedBasin]);
+    if (mode === "leaflet") loadMapData();
+  }, [mode, selectedBasin]);
 
   useEffect(() => {
     const syncUrl = () => {
@@ -93,6 +95,7 @@ function MapContent() {
   }, [selectedBasin, selectedSubbasin]);
 
   useEffect(() => {
+    if (mode !== "leaflet") return;
     const loadSub = async () => {
       if (!selectedBasin) {
         setSubbasins(null);
@@ -107,7 +110,7 @@ function MapContent() {
       }
     };
     loadSub();
-  }, [selectedBasin]);
+  }, [mode, selectedBasin]);
 
   const refreshData = async () => {
     toast.loading("กำลังดึงข้อมูลใหม่...", { id: "refresh" });
@@ -125,13 +128,43 @@ function MapContent() {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
-      {/* Sidebar */}
-      <div className="w-80 bg-white border-r-2 border-primary-200 p-6 overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-6 text-primary-900 tracking-tight flex items-center gap-2">
-          <MapIcon className="w-6 h-6" />
-          Map View
-        </h2>
+    <div className="relative h-[calc(100vh-4rem)]">
+      {/* Mode toggle */}
+      <div className="absolute top-4 right-4 z-[2000]">
+        <div className="bg-white border border-primary-200 rounded-mono p-1 flex gap-1 shadow-mono-lg">
+          <button
+            type="button"
+            onClick={() => setMode("leaflet")}
+            className={`px-3 py-2 rounded-mono text-sm font-medium transition-colors ${
+              mode === "leaflet"
+                ? "bg-primary-900 text-white"
+                : "text-primary-700 hover:bg-primary-100"
+            }`}
+          >
+            Leaflet
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("project")}
+            className={`px-3 py-2 rounded-mono text-sm font-medium transition-colors ${
+              mode === "project"
+                ? "bg-primary-900 text-white"
+                : "text-primary-700 hover:bg-primary-100"
+            }`}
+          >
+            Project Dashboard
+          </button>
+        </div>
+      </div>
+
+      {mode === "leaflet" ? (
+        <div className="flex h-[calc(100vh-4rem)]">
+          {/* Sidebar */}
+          <div className="w-80 bg-white border-r-2 border-primary-200 p-6 overflow-y-auto">
+            <h2 className="text-2xl font-bold mb-6 text-primary-900 tracking-tight flex items-center gap-2">
+              <MapIcon className="w-6 h-6" />
+              Map View
+            </h2>
 
         {/* Basin select */}
         <div className="mb-6">
@@ -367,39 +400,49 @@ function MapContent() {
         )}
       </div>
 
-      {/* Map */}
-      <div className="flex-1 p-4 relative bg-primary-50">
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white rounded-mono z-10 m-4">
-            <div className="text-center">
-              <Loader2 className="w-12 h-12 text-primary-400 animate-spin mx-auto mb-3" />
-              <div className="text-sm text-primary-600 font-medium">Loading map data...</div>
-            </div>
+          {/* Map */}
+          <div className="flex-1 p-4 relative bg-primary-50">
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white rounded-mono z-10 m-4">
+                <div className="text-center">
+                  <Loader2 className="w-12 h-12 text-primary-400 animate-spin mx-auto mb-3" />
+                  <div className="text-sm text-primary-600 font-medium">
+                    Loading map data...
+                  </div>
+                </div>
+              </div>
+            )}
+            <MapView
+              basins={basins}
+              waterLevels={waterLevels}
+              rivers={rivers}
+              dams={dams}
+              selectedBasin={selectedBasin}
+              layers={layers}
+            />
+
+            {/* Tambon Flood Layer */}
+            {layers.tambonFlood && (
+              <TambonFloodLayer
+                visible={layers.tambonFlood}
+                onTambonClick={(tambon) => setSelectedTambon(tambon)}
+              />
+            )}
+
+            {/* Tambon Detail Panel */}
+            <TambonDetailPanel
+              tambon={selectedTambon}
+              onClose={() => setSelectedTambon(null)}
+            />
           </div>
-        )}
-        <MapView
+        </div>
+      ) : (
+        <ProjectDashboardMapbox
           basins={basins}
-          waterLevels={waterLevels}
-          rivers={rivers}
-          dams={dams}
           selectedBasin={selectedBasin}
-          layers={layers}
+          onBasinChange={setSelectedBasin}
         />
-        
-        {/* Tambon Flood Layer */}
-        {layers.tambonFlood && (
-          <TambonFloodLayer
-            visible={layers.tambonFlood}
-            onTambonClick={(tambon) => setSelectedTambon(tambon)}
-          />
-        )}
-        
-        {/* Tambon Detail Panel */}
-        <TambonDetailPanel
-          tambon={selectedTambon}
-          onClose={() => setSelectedTambon(null)}
-        />
-      </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import AlertCenter from "@/components/alerts/AlertCenter";
+import WelcomeBanner from "@/components/common/WelcomeBanner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -44,6 +45,7 @@ export default function RootLayout({
           }}
         />
         <AlertCenter />
+        <WelcomeBanner />
         {children}
       </body>
     </html>

@@ -150,3 +150,73 @@ async def model_accuracy(db: AsyncSession = Depends(get_db)):
             for r in result
         ]
     }
+
+
+@router.get("/climate-forecast")
+async def climate_forecast(
+    basin_id: str = Query(..., description="Basin id (e.g. mekong_north)"),
+    days_ahead: int = Query(default=30, ge=1, le=365),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Forecast summary for the next `days_ahead` window.
+
+    This is derived from the latest matching/nearest `Prediction` row in the DB.
+    """
+    if basin_id not in settings.BASINS:
+        raise HTTPException(400, f"Invalid basin. Valid: {list(settings.BASINS.keys())}")
+
+    result = await db.execute(
+        select(Prediction)
+        .where(Prediction.basin_id == basin_id)
+        .order_by(Prediction.predict_date.desc())
+        .limit(200)
+    )
+    preds = result.scalars().all()
+    if not preds:
+        return {
+            "basin_id": basin_id,
+            "basin_name": settings.BASINS[basin_id]["name"],
+            "days_ahead": days_ahead,
+            "target_date": None,
+            "flood_probability": 0.0,
+            "risk_level": "normal",
+            "predicted_water_level": None,
+            "affected_area_sqkm": None,
+            "confidence": None,
+            "model_version": None,
+            "model_accuracy": None,
+        }
+
+    def _pred_days(p: Prediction) -> int:
+        if not p.predict_date or not p.target_date:
+            return 0
+        return int(round((p.target_date - p.predict_date).total_seconds() / 86400.0))
+
+    # Pick the row with the closest days-ahead to the requested value.
+    chosen = min(
+        preds,
+        key=lambda p: (
+            abs(_pred_days(p) - days_ahead),
+            # Tie-breaker: prefer most recent predict_date.
+            -(p.predict_date.timestamp() if p.predict_date else 0),
+        ),
+    )
+
+    chosen_days = _pred_days(chosen)
+    risk_level = chosen.risk_level.value if chosen.risk_level else "normal"
+
+    return {
+        "basin_id": basin_id,
+        "basin_name": settings.BASINS[basin_id]["name"],
+        "days_ahead": chosen_days,
+        "target_date": chosen.target_date.isoformat() if chosen.target_date else None,
+        # Flood probability is stored as 0-1 in DB.
+        "flood_probability": float(chosen.flood_probability or 0.0),
+        "risk_level": risk_level,
+        "predicted_water_level": chosen.predicted_water_level,
+        "affected_area_sqkm": chosen.affected_area_sqkm,
+        "confidence": chosen.confidence,
+        "model_version": chosen.model_version,
+        "model_accuracy": chosen.model_accuracy,
+    }

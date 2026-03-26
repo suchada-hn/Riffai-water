@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from app.models.database import get_db
-from app.models.models import Station, WaterLevel, Rainfall
+from app.models.models import Station, WaterLevel, Rainfall, Prediction
 from app.config import get_settings
 from app.data.grid_tiles import (
     THAILAND_BOUNDS,
@@ -115,6 +115,32 @@ async def get_tiles(
     as_of = _parse_date(date)
     stations, water_avg, rain_sum = await _load_station_snapshots(db, as_of)
 
+    # Preload latest per-basin predictions for the tile-level AI panel.
+    # NOTE: This avoids per-tile DB queries inside the nested tile loops.
+    basin_ids = list(settings.BASINS.keys())
+    pred_rows = (
+        await db.execute(
+            select(Prediction)
+            .where(Prediction.basin_id.in_(basin_ids))
+            .order_by(Prediction.basin_id, Prediction.predict_date.desc())
+        )
+    ).scalars().all()
+    latest_predictions: Dict[str, Dict[str, Any]] = {}
+    for p in pred_rows:
+        if not p.basin_id or p.basin_id in latest_predictions:
+            continue
+        # Convert ML probability (0-1) into percent (0-100) for the existing UI.
+        flood_probability_percent = (float(p.flood_probability or 0.0) * 100.0)
+        days_ahead = 0
+        if p.predict_date and p.target_date:
+            days_ahead = int(round((p.target_date - p.predict_date).total_seconds() / 86400.0))
+            days_ahead = max(0, days_ahead)
+
+        latest_predictions[p.basin_id] = {
+            "floodProbability": flood_probability_percent,
+            "daysAhead": days_ahead,
+        }
+
     # Build per-tile aggregations from real station readings.
     tile_water_vals: Dict[str, List[float]] = {}
     tile_rain_vals: Dict[str, List[float]] = {}
@@ -173,8 +199,8 @@ async def get_tiles(
                 "rivers": [],
                 "dams": [],
                 "aiPrediction": {
-                    "floodProbability": 0.0,
-                    "daysAhead": 1,
+                    "floodProbability": (latest_predictions.get(inferred_basin_id or "", {}).get("floodProbability") or 0.0),
+                    "daysAhead": (latest_predictions.get(inferred_basin_id or "", {}).get("daysAhead") or 0),
                 },
                 "lastUpdate": as_of.isoformat(),
             }
@@ -236,6 +262,31 @@ async def get_summary(
         "lastUpdate": (fc.get("meta") or {}).get("asOf"),
         "meta": {**(fc.get("meta") or {}), "dataSource": "database"},
     }
+
+
+@router.get("/flood-risk")
+async def get_flood_risk(
+    basin_id: Optional[str] = Query(None, description="Filter tiles by basin_id"),
+    date: Optional[str] = Query(None, description="As-of date (YYYY-MM-DD or ISO)"),
+    risk_level: Optional[str] = Query(
+        None,
+        regex="^(safe|normal|watch|warning|critical)$",
+        description="Optional filter by risk level",
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Flood-risk polygons used by the Mapbox project-dashboard overlay.
+    Returns a FeatureCollection compatible with mapbox-gl fill layers.
+    """
+    # Reuse the tile generator; the frontend styles by `properties.riskLevel`.
+    fc = await get_tiles(
+        risk_level=risk_level,
+        basin_id=basin_id,
+        date=date,
+        db=db,
+    )
+    return fc
 
 
 @router.get("/tiles/{tile_id}")

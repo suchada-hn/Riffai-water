@@ -101,12 +101,15 @@ export const mapAPI = {
   subbasins: (basinId: string) => api.get("/api/map/subbasins", { params: { basin_id: basinId } }),
   rivers: () => api.get("/api/map/rivers"),
   dams: () => api.get("/api/map/dams"),
+  sarStatus: () => api.get("/api/map/sar-status"),
   stations: (basinId?: string) =>
     api.get("/api/map/stations", { params: { basin_id: basinId } }),
   waterLevelMap: (basinId?: string) =>
     api.get("/api/map/water-level-map", { params: { basin_id: basinId } }),
   floodLayer: (basinId: string, date?: string) =>
     api.get(`/api/map/flood-layer/${basinId}`, { params: { date } }),
+  floodRisk: (params?: { basin_id?: string; date?: string; risk_level?: string }) =>
+    api.get("/api/map/flood-risk", { params }),
   satellite: (basinId: string, index = "ndwi") =>
     api.get(`/api/map/satellite/${basinId}`, { params: { index } }),
   tiles: (params?: { risk_level?: string; basin_id?: string; date?: string }) =>
@@ -128,6 +131,10 @@ export const predictAPI = {
     }),
   history: (basinId: string, days = 90) =>
     api.get(`/api/predict/history/${basinId}`, { params: { days } }),
+  climateForecast: (basinId: string, daysAhead = 30) =>
+    api.get("/api/predict/climate-forecast", {
+      params: { basin_id: basinId, days_ahead: daysAhead },
+    }),
   accuracy: () => api.get("/api/predict/accuracy"),
 };
 

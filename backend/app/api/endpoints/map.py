@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from datetime import datetime
 from typing import Optional
 
@@ -218,3 +218,38 @@ async def get_dams():
     except Exception as e:
         print(f"Error in get_dams: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to load dams: {str(e)}")
+
+
+@router.get("/sar-status")
+async def get_sar_status(db: AsyncSession = Depends(get_db)):
+    """
+    Per-basin SAR fetch status derived from the latest SatelliteImage records.
+    Uses `SatelliteImage.source` prefix `sentinel-1-sar`.
+    """
+    basin_ids = list(settings.BASINS.keys())
+
+    # Fetch English display names (seed sets `Basin.name_en`).
+    basin_rows = (await db.execute(select(Basin.id, Basin.name_en).where(Basin.id.in_(basin_ids)))).all()
+    basin_name_en = {row[0]: (row[1] or row[0]) for row in basin_rows}
+
+    out = []
+    for bid in basin_ids:
+        predicate = and_(
+            SatelliteImage.basin_id == bid,
+            SatelliteImage.source.like("sentinel-1-sar%"),
+        )
+
+        image_count = await db.scalar(select(func.count(SatelliteImage.id)).where(predicate))
+        last_fetch_date = await db.scalar(select(func.max(SatelliteImage.acquisition_date)).where(predicate))
+
+        status = "fetched" if image_count and int(image_count) > 0 else "pending"
+        out.append(
+            {
+                "basin_en": basin_name_en.get(bid, bid),
+                "status": status,
+                "image_count": int(image_count or 0),
+                "last_fetch_date": last_fetch_date.isoformat() if last_fetch_date else "No data yet",
+            }
+        )
+
+    return out
