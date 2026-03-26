@@ -9,6 +9,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        energy: {
+          50: '#eefcfb',
+          100: '#d8f8f5',
+          200: '#b0f0ea',
+          300: '#7be5de',
+          400: '#3dd5ce',
+          500: '#16b8b1',
+          600: '#0c9791',
+          700: '#0e7a75',
+          800: '#0e605c',
+          900: '#0d4e4a',
+        },
         // Monochrome Theme - Black & White Only
         primary: {
           50: '#fafafa',
