@@ -90,6 +90,25 @@ export default function ProjectDashboardMapbox({
   selectedBasin: string | null;
   onBasinChange: (id: string | null) => void;
 }) {
+  // #region agent log
+  const __dbg = (hypothesisId: string, message: string, data: Record<string, any>) => {
+    if (typeof window === "undefined") return;
+    fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f37a02" },
+      body: JSON.stringify({
+        sessionId: "f37a02",
+        runId: "pre-fix",
+        hypothesisId,
+        location: "frontend/src/components/projectDashboardMapbox/ProjectDashboardMapbox.tsx",
+        message,
+        data,
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  };
+  // #endregion
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const sourcesAddedRef = useRef(false);
@@ -144,13 +163,37 @@ export default function ProjectDashboardMapbox({
     return list;
   }, [floodData]);
 
+  // #region agent log
+  useEffect(() => {
+    __dbg("H_OVERLAY", "overlay state", {
+      tilesLoading,
+      mapLoaded,
+      overlayVisible: tilesLoading || !mapLoaded,
+      floodFeatures: floodData?.features?.length ?? null,
+    });
+  }, [tilesLoading, mapLoaded, floodData]);
+  // #endregion
+
   // Fetch basins if caller didn't provide it.
   useEffect(() => {
     if (basinsData) return;
+    // #region agent log
+    __dbg("H_BASINS_FETCH", "basins fetch start", { providedByProps: !!basins });
+    // #endregion
     mapAPI
       .basins()
-      .then((res) => setBasinsData(res.data))
-      .catch(() => toast.error("Failed to load basin boundaries"));
+      .then((res) => {
+        // #region agent log
+        __dbg("H_BASINS_FETCH", "basins fetch ok", { featureCount: res?.data?.features?.length ?? null });
+        // #endregion
+        setBasinsData(res.data);
+      })
+      .catch((e) => {
+        // #region agent log
+        __dbg("H_BASINS_FETCH", "basins fetch error", { message: String(e?.message ?? e ?? "unknown") });
+        // #endregion
+        toast.error("Failed to load basin boundaries");
+      });
   }, [basinsData]);
 
   // Fetch tiles when basin filter changes.
@@ -158,15 +201,34 @@ export default function ProjectDashboardMapbox({
     const fetchTiles = async () => {
       try {
         setTilesLoading(true);
+        // #region agent log
+        __dbg("H_TILES_FETCH", "tiles fetch start", { selectedBasin: selectedBasin ?? null });
+        // #endregion
         const res = await mapAPI.floodRisk({
           basin_id: selectedBasin ?? undefined,
         });
+        // #region agent log
+        __dbg("H_TILES_FETCH", "tiles fetch ok", {
+          featureCount: res?.data?.features?.length ?? null,
+          type: res?.data?.type ?? null,
+        });
+        // #endregion
         setFloodData(res.data);
-      } catch {
+      } catch (e: any) {
+        // #region agent log
+        __dbg("H_TILES_FETCH", "tiles fetch error", {
+          message: String(e?.message ?? e ?? "unknown"),
+          status: e?.response?.status ?? null,
+          url: e?.config?.url ?? null,
+        });
+        // #endregion
         toast.error("Failed to load flood risk tiles");
         setFloodData(emptyFC);
       } finally {
         setTilesLoading(false);
+        // #region agent log
+        __dbg("H_TILES_FETCH", "tiles fetch done", { selectedBasin: selectedBasin ?? null });
+        // #endregion
       }
     };
     fetchTiles();
@@ -198,11 +260,17 @@ export default function ProjectDashboardMapbox({
 
     if (!token) {
       setMapError("Missing NEXT_PUBLIC_MAPBOX_TOKEN. Set it in your environment to enable Mapbox rendering.");
+      // #region agent log
+      __dbg("H_TOKEN", "missing NEXT_PUBLIC_MAPBOX_TOKEN", { tokenPresent: false });
+      // #endregion
       return;
     }
 
     try {
       mapboxgl.accessToken = token;
+      // #region agent log
+      __dbg("H_MAP_INIT", "map init start", { style: "mapbox://styles/mapbox/streets-v12" });
+      // #endregion
       const map = new mapboxgl.Map({
         container: containerRef.current,
         style: "mapbox://styles/mapbox/streets-v12",
@@ -212,11 +280,58 @@ export default function ProjectDashboardMapbox({
 
       map.on("load", () => {
         setMapLoaded(true);
+        // #region agent log
+        __dbg("H_MAP_LOAD", "map load event", {
+          styleLoaded: map.isStyleLoaded(),
+          center: map.getCenter().toArray(),
+          zoom: map.getZoom(),
+        });
+        // #endregion
       });
+
+      map.on("error", (evt: any) => {
+        // #region agent log
+        __dbg("H_MAP_ERROR", "mapbox error event", {
+          message: evt?.error?.message ?? null,
+          status: evt?.error?.status ?? null,
+          url: evt?.error?.url ?? null,
+        });
+        // #endregion
+      });
+
+      map.once("idle", () => {
+        // #region agent log
+        __dbg("H_MAP_TILES", "map idle (tiles/style state)", {
+          loaded: map.loaded(),
+          styleLoaded: map.isStyleLoaded(),
+          areTilesLoaded: (map as any).areTilesLoaded ? (map as any).areTilesLoaded() : null,
+          hasComposite: !!map.getSource("composite"),
+        });
+        // #endregion
+      });
+
+      // Detect WebGL context loss on the actual canvas element.
+      // (Can happen due to GPU/driver/browser settings, producing a white map.)
+      const canvas = map.getCanvas();
+      const onLost = () => {
+        // #region agent log
+        __dbg("H_WEBGL", "webglcontextlost", {});
+        // #endregion
+      };
+      const onRestored = () => {
+        // #region agent log
+        __dbg("H_WEBGL", "webglcontextrestored", {});
+        // #endregion
+      };
+      canvas.addEventListener("webglcontextlost", onLost as any, { passive: true } as any);
+      canvas.addEventListener("webglcontextrestored", onRestored as any, { passive: true } as any);
 
       mapRef.current = map;
     } catch {
       setMapError("Failed to initialize Mapbox. Check your token and Mapbox access.");
+      // #region agent log
+      __dbg("H_MAP_INIT", "map init exception", {});
+      // #endregion
     }
   }, [token]);
 
@@ -226,6 +341,15 @@ export default function ProjectDashboardMapbox({
     if (!mapLoaded) return;
 
     const map = mapRef.current;
+    // #region agent log
+    __dbg("H_LAYERS", "ensureSourcesAndLayers enter", {
+      basinsFeatures: basinsData?.features?.length ?? 0,
+      floodFeatures: floodData?.features?.length ?? 0,
+      visibility: layers,
+    });
+    // #endregion
+
+    try {
 
     // Basins layer
     map.addSource("basins", {
@@ -334,6 +458,20 @@ export default function ProjectDashboardMapbox({
     });
 
     sourcesAddedRef.current = true;
+    // #region agent log
+    __dbg("H_LAYERS", "ensureSourcesAndLayers success", {
+      sourcesAdded: true,
+      hasBasinsSource: !!map.getSource("basins"),
+      hasFloodSource: !!map.getSource("flood_risk"),
+    });
+    // #endregion
+    } catch (e: any) {
+      // #region agent log
+      __dbg("H_LAYERS", "ensureSourcesAndLayers error", {
+        message: String(e?.message ?? e ?? "unknown"),
+      });
+      // #endregion
+    }
   };
 
   // Create layers when map is ready and data has arrived.

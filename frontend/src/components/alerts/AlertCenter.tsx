@@ -34,6 +34,27 @@ export default function AlertCenter() {
 
   const loadAlerts = async () => {
     try {
+      // #region agent log
+      if (typeof window !== "undefined") {
+        fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cac839" },
+          body: JSON.stringify({
+            sessionId: "cac839",
+            runId: "pre-fix",
+            hypothesisId: "H1",
+            location: "frontend/src/components/alerts/AlertCenter.tsx:loadAlerts",
+            message: "Loading alerts (endpoint + baseURL check)",
+            data: {
+              apiUrlEnv: process.env.NEXT_PUBLIC_API_URL ? "[set]" : "[unset]",
+              attemptedPath: "/api/alerts",
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
+
       const data = (await api.get("/api/alerts")).data;
       
       // Check for new alerts
@@ -54,6 +75,29 @@ export default function AlertCenter() {
       
       setAlerts(data);
     } catch (error) {
+      // #region agent log
+      if (typeof window !== "undefined") {
+        const anyErr: any = error;
+        fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cac839" },
+          body: JSON.stringify({
+            sessionId: "cac839",
+            runId: "pre-fix",
+            hypothesisId: "H1",
+            location: "frontend/src/components/alerts/AlertCenter.tsx:loadAlerts:catch",
+            message: "Failed to load alerts",
+            data: {
+              attemptedPath: "/api/alerts",
+              status: anyErr?.response?.status,
+              statusText: anyErr?.response?.statusText,
+              message: anyErr?.message,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+      }
+      // #endregion
       console.error("Failed to load alerts:", error);
     }
   };
