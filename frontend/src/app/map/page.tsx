@@ -10,6 +10,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
+import LayerToggleRow from "@/components/map/LayerToggleRow";
 import { useRouter } from "next/navigation";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
@@ -194,21 +195,16 @@ function MapContent() {
               { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
               { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
             ].map(({ key, label, description }) => (
-              <label
+              <LayerToggleRow
                 key={key}
-                className="flex items-start gap-3 p-3 hover:bg-primary-50 rounded-mono cursor-pointer transition-colors border border-transparent hover:border-primary-200"
-              >
-                <input
-                  type="checkbox"
-                  checked={layers[key]}
-                  onChange={() => toggle(key)}
-                  className="mt-0.5 w-4 h-4 rounded-mono border-primary-300 text-primary-900 focus:ring-primary-900"
-                />
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-primary-900">{label}</div>
-                  <div className="text-xs text-primary-500 font-mono mt-0.5">{description}</div>
-                </div>
-              </label>
+                id={`layer-${key}`}
+                label={label}
+                description={description}
+                checked={layers[key]}
+                onChange={() => toggle(key)}
+              />
+            )) as any}
+          </div>
             ))}
           </div>
         </div>
