@@ -1,9 +1,10 @@
 "use client";
 
-import MapHudShell from "@/components/map/ui/MapHudShell";
+import MapHudShell, { type HudPosition } from "@/components/map/ui/MapHudShell";
 
 interface Props {
   featureCount?: number;
+  position?: HudPosition;
 }
 
 const STEPS = [
@@ -14,12 +15,12 @@ const STEPS = [
   { label: "Very Low (0-20%)", color: "#1a9850" },
 ];
 
-export default function FoliumFloodLegend({ featureCount }: Props) {
+export default function FoliumFloodLegend({ featureCount, position = "topCenter" }: Props) {
   return (
     <MapHudShell
       title="Folium Flood Probability"
       subtitle="High-contrast choropleth mode"
-      position="topCenter"
+      position={position}
       dense
     >
       <div className="text-[11px] text-primary-600 mb-2">

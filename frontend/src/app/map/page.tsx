@@ -35,21 +35,24 @@ function MapContent() {
   const router = useRouter();
   const basinSelectRef = useRef<HTMLSelectElement | null>(null);
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
-  const [waterLevels, setWaterLevels] = useState<GeoJSONFeatureCollection | null>(null);
+  const [waterLevels, setWaterLevels] =
+    useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
   const [dams, setDams] = useState<GeoJSONFeatureCollection | null>(null);
   const [tileSummary, setTileSummary] = useState<any>(null);
   const [selectedBasin, setSelectedBasin] = useState<string | null>(
-    searchParams?.get("basin") || null
+    searchParams?.get("basin") || null,
   );
-  const [subbasins, setSubbasins] = useState<GeoJSONFeatureCollection | null>(null);
+  const [subbasins, setSubbasins] = useState<GeoJSONFeatureCollection | null>(
+    null,
+  );
   const [selectedSubbasin, setSelectedSubbasin] = useState<string | null>(
-    searchParams?.get("subbasin") || null
+    searchParams?.get("subbasin") || null,
   );
   const [layers, setLayers] = useState({
     basins: true,
     waterLevels: true,
-    rivers: true,
+    rivers: false,
     dams: true,
     satellite: false,
     floodDepth: false,
@@ -57,12 +60,14 @@ function MapContent() {
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
-    foliumFloodProbability: false,
+    foliumFloodProbability: true,
     onwrSar: false,
     onwrNational: false,
-    v3DailyValidation: false,
+    v3DailyValidation: true,
   });
-  const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<number | null>(null);
+  const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<
+    number | null
+  >(null);
   const {
     geojson: onwrFc,
     dates: onwrDates,
@@ -72,8 +77,11 @@ function MapContent() {
     loadingDates: sarLoadingDates,
     error: sarError,
   } = useFloodLayer(layers.onwrSar ? selectedBasin : null, layers.onwrSar);
-  const [onwrNationalFc, setOnwrNationalFc] = useState<GeoJSONFeatureCollection | null>(null);
-  const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [onwrNationalFc, setOnwrNationalFc] =
+    useState<GeoJSONFeatureCollection | null>(null);
+  const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(
+    null,
+  );
   const [v3DailyLoading, setV3DailyLoading] = useState(false);
   const [v3DailyError, setV3DailyError] = useState<string | null>(null);
   const [onwrAlerts, setOnwrAlerts] = useState<
@@ -107,7 +115,11 @@ function MapContent() {
       setRivers(r.data);
       setDams(d.data);
       setTileSummary(ts.data);
-      console.log("Map data loaded:", { basins: b.data, rivers: r.data, dams: d.data });
+      console.log("Map data loaded:", {
+        basins: b.data,
+        rivers: r.data,
+        dams: d.data,
+      });
     } catch (err) {
       console.error("Failed to load map data:", err);
       toast.error("โหลดข้อมูลแผนที่ล้มเหลว");
@@ -150,7 +162,9 @@ function MapContent() {
 
   useEffect(() => {
     const syncUrl = () => {
-      const params = new URLSearchParams(Array.from(searchParams?.entries?.() || []));
+      const params = new URLSearchParams(
+        Array.from(searchParams?.entries?.() || []),
+      );
       if (selectedBasin) params.set("basin", selectedBasin);
       else params.delete("basin");
       if (selectedSubbasin) params.set("subbasin", selectedSubbasin);
@@ -170,8 +184,8 @@ function MapContent() {
           setOnwrAlerts(
             [...(data.alerts || [])].sort(
               (a: { mean_z_score?: number }, b: { mean_z_score?: number }) =>
-                (a.mean_z_score ?? 0) - (b.mean_z_score ?? 0)
-            )
+                (a.mean_z_score ?? 0) - (b.mean_z_score ?? 0),
+            ),
           );
       } catch {
         if (!cancelled) setOnwrAlerts([]);
@@ -248,7 +262,11 @@ function MapContent() {
       return false;
     });
     return feats.length
-      ? { ...onwrNationalFc, type: "FeatureCollection" as const, features: feats }
+      ? {
+          ...onwrNationalFc,
+          type: "FeatureCollection" as const,
+          features: feats,
+        }
       : onwrNationalFc;
   }, [onwrNationalFc, selectedBasin]);
 
@@ -313,11 +331,13 @@ function MapContent() {
       };
     });
     const header = Object.keys(rows[0]);
-    const esc = (v: unknown) =>
-      `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv = [header.join(","), ...rows.map((r) => header.map((h) => esc(r[h as keyof typeof r])).join(","))].join(
-      "\n"
-    );
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [
+      header.join(","),
+      ...rows.map((r) =>
+        header.map((h) => esc(r[h as keyof typeof r])).join(","),
+      ),
+    ].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -347,7 +367,9 @@ function MapContent() {
           <div className="absolute inset-0 flex items-center justify-center bg-white/85 backdrop-blur rounded-mono z-[1050] m-3 md:m-4">
             <div className="text-center">
               <Loader2 className="w-12 h-12 text-gray-700 animate-spin mx-auto mb-3" />
-              <div className="text-sm text-gray-700 font-medium">Loading map data…</div>
+              <div className="text-sm text-gray-700 font-medium">
+                Loading map data…
+              </div>
             </div>
           </div>
         )}
@@ -359,7 +381,9 @@ function MapContent() {
           onToggle={() => setDrawerOpen((v) => !v)}
         >
           <section className="space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">Location</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">
+              Location
+            </h3>
             <div>
               <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
                 Select Basin
@@ -389,14 +413,21 @@ function MapContent() {
                 disabled={!selectedBasin || !subbasins}
               >
                 <option value="">
-                  {subbasinsLoading ? "Loading Sub-basins..." : "All Sub-basins"}
+                  {subbasinsLoading
+                    ? "Loading Sub-basins..."
+                    : "All Sub-basins"}
                 </option>
                 {(subbasins?.features || []).map((f: any, idx: number) => (
                   <option
                     key={f.properties.subbasin_id || f.properties.id || idx}
-                    value={f.properties.subbasin_id || f.properties.id || String(idx)}
+                    value={
+                      f.properties.subbasin_id || f.properties.id || String(idx)
+                    }
                   >
-                    {f.properties.name || f.properties.subbasin_id || f.properties.id || `subbasin-${idx + 1}`}
+                    {f.properties.name ||
+                      f.properties.subbasin_id ||
+                      f.properties.id ||
+                      `subbasin-${idx + 1}`}
                   </option>
                 ))}
               </select>
@@ -415,23 +446,71 @@ function MapContent() {
             </h3>
             <div className="space-y-2">
               {[
-                { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
-                { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
-                { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+                {
+                  key: "heatmap" as const,
+                  label: "Flood Risk Heatmap",
+                  description: "Grid-based risk visualization",
+                },
+                {
+                  key: "onwrSar" as const,
+                  label: "ONWR SAR sub-basin (Z-score)",
+                  description: "Sentinel-1 zonal stats — HydroBASIN Lev09",
+                },
+                {
+                  key: "tambonFlood" as const,
+                  label: "Tambon Flood Prediction",
+                  description: "XGBoost AI model (6,363 tambons)",
+                },
                 {
                   key: "foliumFloodProbability" as const,
                   label: "Folium Flood Probability (Tambon polygons)",
                   description: "Standalone high-contrast polygon layer",
                 },
-                { key: "v3DailyValidation" as const, label: "V3 daily validation", description: "Static test-set snapshot — TP/TN/FP/FN" },
-                { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
-                { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
-                { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
-                { key: "dams" as const, label: "Dams & Reservoirs", description: "Water management infrastructure" },
-                { key: "waterLevels" as const, label: "Water Levels", description: "Current station readings" },
-                { key: "floodDepth" as const, label: "Flood Depth", description: "Predicted inundation depth" },
-                { key: "rainfall" as const, label: "Rainfall Data", description: "Precipitation measurements" },
-                { key: "satellite" as const, label: "Satellite Imagery", description: "Sentinel-1/2 imagery" },
+                {
+                  key: "v3DailyValidation" as const,
+                  label: "V3 daily validation",
+                  description: "Static test-set snapshot — TP/TN/FP/FN",
+                },
+                {
+                  key: "timelapse" as const,
+                  label: "Time-lapse Animation",
+                  description: "Historical playback (7 days)",
+                },
+                {
+                  key: "basins" as const,
+                  label: "Basin Boundaries",
+                  description: "Administrative boundaries",
+                },
+                {
+                  key: "rivers" as const,
+                  label: "Rivers",
+                  description: "Major river systems",
+                },
+                {
+                  key: "dams" as const,
+                  label: "Dams & Reservoirs",
+                  description: "Water management infrastructure",
+                },
+                {
+                  key: "waterLevels" as const,
+                  label: "Water Levels",
+                  description: "Current station readings",
+                },
+                {
+                  key: "floodDepth" as const,
+                  label: "Flood Depth",
+                  description: "Predicted inundation depth",
+                },
+                {
+                  key: "rainfall" as const,
+                  label: "Rainfall Data",
+                  description: "Precipitation measurements",
+                },
+                {
+                  key: "satellite" as const,
+                  label: "Satellite Imagery",
+                  description: "Sentinel-1/2 imagery",
+                },
               ].map(({ key, label, description }) => (
                 <LayerToggleRow
                   key={key}
@@ -440,7 +519,11 @@ function MapContent() {
                   label={label}
                   description={description}
                   disabled={key === "onwrSar" && !selectedBasin}
-                  disabledReason={key === "onwrSar" && !selectedBasin ? "Select basin first" : undefined}
+                  disabledReason={
+                    key === "onwrSar" && !selectedBasin
+                      ? "Select basin first"
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -464,7 +547,11 @@ function MapContent() {
                 ))}
               </select>
               {onwrFc && (
-                <button type="button" onClick={exportOnwrCsv} className="w-full btn-mono-outline text-xs py-2">
+                <button
+                  type="button"
+                  onClick={exportOnwrCsv}
+                  className="w-full btn-mono-outline text-xs py-2"
+                >
                   Download sub-basin CSV
                 </button>
               )}
@@ -481,37 +568,50 @@ function MapContent() {
           />
         </MapDrawer>
 
-        {layers.tambonFlood && (
-          <TambonFloodMapLegend loading={false} error={null} stats={null} featureCount={undefined} />
-        )}
-        {layers.foliumFloodProbability && (
-          <FoliumFloodLegend featureCount={foliumFloodFeatureCount ?? undefined} />
-        )}
-        {layers.v3DailyValidation && (
-          <FloodV3ValidationLegend
-            featureCount={v3DailyFc?.features?.length}
-            loading={v3DailyLoading}
-            error={v3DailyError}
-          />
-        )}
-
-        {layers.onwrSar && selectedBasin && (
-          <FloodLayerPanel
-            dates={onwrDates}
-            selectedDate={onwrDate}
-            onDateChange={setOnwrDate}
-            loading={sarLoading}
-            loadingDates={sarLoadingDates}
-            error={sarError}
-            featureCount={onwrFc?.features?.length}
-            floodedCount={
-              onwrFc?.features?.filter((f) => f.properties?.flood_detected).length
-            }
-            pipelineBasinLabel={
-              APP_TO_ONWR_BASIN[selectedBasin] ?? selectedBasin
-            }
-          />
-        )}
+        <div className="absolute top-4 right-4 z-[1000] w-[min(92vw,22rem)] max-h-[calc(100%-2rem)] overflow-y-auto space-y-3 pointer-events-none">
+          {layers.onwrSar && selectedBasin && (
+            <FloodLayerPanel
+              dates={onwrDates}
+              selectedDate={onwrDate}
+              onDateChange={setOnwrDate}
+              loading={sarLoading}
+              loadingDates={sarLoadingDates}
+              error={sarError}
+              featureCount={onwrFc?.features?.length}
+              floodedCount={
+                onwrFc?.features?.filter((f) => f.properties?.flood_detected)
+                  .length
+              }
+              pipelineBasinLabel={
+                APP_TO_ONWR_BASIN[selectedBasin] ?? selectedBasin
+              }
+              position="inline"
+            />
+          )}
+          {layers.tambonFlood && (
+            <TambonFloodMapLegend
+              loading={false}
+              error={null}
+              stats={null}
+              featureCount={undefined}
+              position="inline"
+            />
+          )}
+          {layers.foliumFloodProbability && (
+            <FoliumFloodLegend
+              featureCount={foliumFloodFeatureCount ?? undefined}
+              position="inline"
+            />
+          )}
+          {layers.v3DailyValidation && (
+            <FloodV3ValidationLegend
+              featureCount={v3DailyFc?.features?.length}
+              loading={v3DailyLoading}
+              error={v3DailyError}
+              position="inline"
+            />
+          )}
+        </div>
 
         {/* Tambon Flood Layer */}
         {layers.tambonFlood && (
@@ -520,8 +620,11 @@ function MapContent() {
             onTambonClick={(tambon) => setSelectedTambon(tambon)}
           />
         )}
-        
-        <TambonDetailPanel tambon={selectedTambon} onClose={() => setSelectedTambon(null)} />
+
+        <TambonDetailPanel
+          tambon={selectedTambon}
+          onClose={() => setSelectedTambon(null)}
+        />
       </div>
     </div>
   );

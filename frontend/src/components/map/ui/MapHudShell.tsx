@@ -2,12 +2,13 @@
 
 import { ReactNode } from "react";
 
-type HudPosition =
+export type HudPosition =
   | "topRight"
   | "topCenter"
   | "bottomLeft"
   | "bottomRight"
-  | "bottomCenter";
+  | "bottomCenter"
+  | "inline";
 
 interface MapHudShellProps {
   title: string;
@@ -23,6 +24,7 @@ const POSITION_CLASS: Record<HudPosition, string> = {
   bottomLeft: "bottom-4 left-4",
   bottomRight: "bottom-4 right-4",
   bottomCenter: "bottom-4 left-1/2 -translate-x-1/2",
+  inline: "",
 };
 
 export default function MapHudShell({
@@ -32,8 +34,15 @@ export default function MapHudShell({
   dense = false,
   children,
 }: MapHudShellProps) {
+  const isInline = position === "inline";
   return (
-    <div className={`absolute z-[1000] ${POSITION_CLASS[position]} max-w-[min(92vw,22rem)] pointer-events-none`}>
+    <div
+      className={
+        isInline
+          ? "pointer-events-none w-full"
+          : `absolute z-[1000] ${POSITION_CLASS[position]} max-w-[min(92vw,22rem)] pointer-events-none`
+      }
+    >
       <section className="pointer-events-auto card-mono shadow-mono-lg">
         <header className={`border-b border-primary-200 ${dense ? "px-3 py-2" : "px-4 py-3"}`}>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-900 text-wrap balance">

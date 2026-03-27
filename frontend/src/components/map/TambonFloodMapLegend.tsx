@@ -1,6 +1,6 @@
 "use client";
 
-import MapHudShell from "@/components/map/ui/MapHudShell";
+import MapHudShell, { type HudPosition } from "@/components/map/ui/MapHudShell";
 
 function riskCount(
   dist: Record<string, unknown> | undefined,
@@ -23,6 +23,7 @@ interface Props {
     total_tambons?: number;
     risk_distribution?: Record<string, unknown>;
   } | null;
+  position?: HudPosition;
 }
 
 const ROWS: { snake: string; upper: string; label: string; color: string }[] = [
@@ -38,6 +39,7 @@ export default function TambonFloodMapLegend({
   error,
   featureCount,
   stats,
+  position = "topCenter",
 }: Props) {
   const dist = stats?.risk_distribution;
   const totalNation =
@@ -49,7 +51,7 @@ export default function TambonFloodMapLegend({
     <MapHudShell
       title="Tambon Flood Prediction"
       subtitle="XGBoost operational forecast"
-      position="topCenter"
+      position={position}
       dense
     >
       <div className="text-[11px] text-primary-600 mb-2">

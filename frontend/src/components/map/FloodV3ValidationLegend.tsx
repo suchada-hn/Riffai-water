@@ -1,6 +1,6 @@
 "use client";
 
-import MapHudShell from "@/components/map/ui/MapHudShell";
+import MapHudShell, { type HudPosition } from "@/components/map/ui/MapHudShell";
 
 export const V3_CONFUSION_COLORS: { key: string; label: string; hex: string }[] = [
   { key: "TP", label: "True positive", hex: "#2ecc71" },
@@ -13,18 +13,20 @@ interface Props {
   featureCount?: number;
   loading?: boolean;
   error?: string | null;
+  position?: HudPosition;
 }
 
 export default function FloodV3ValidationLegend({
   featureCount,
   loading,
   error,
+  position = "bottomLeft",
 }: Props) {
   return (
     <MapHudShell
       title="V3 Daily Validation"
       subtitle="Static confusion snapshot (TP/TN/FP/FN)"
-      position="bottomLeft"
+      position={position}
       dense
     >
       <div className="text-[11px] text-primary-600 leading-relaxed mb-2 font-mono tabular-nums">

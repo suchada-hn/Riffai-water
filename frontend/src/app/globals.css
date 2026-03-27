@@ -102,6 +102,26 @@
   @apply bg-white border-gray-200;
 }
 
+/* Map point markers (DAM + water stations) */
+.map-marker-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.35);
+}
+
+.map-marker-water {
+  box-shadow: none;
+}
+
+.map-marker-dam {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(145deg, #334155, #0f172a);
+}
+
 /* Custom scrollbar - Monochrome */
 ::-webkit-scrollbar {
   width: 8px;

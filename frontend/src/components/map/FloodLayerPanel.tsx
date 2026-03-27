@@ -1,7 +1,7 @@
 "use client";
 
 import { zscoreToColor } from "@/constants/onwrSarZscore";
-import MapHudShell from "@/components/map/ui/MapHudShell";
+import MapHudShell, { type HudPosition } from "@/components/map/ui/MapHudShell";
 
 interface Props {
   dates: string[];
@@ -14,6 +14,7 @@ interface Props {
   floodedCount?: number;
   /** e.g. "EastCoast" for subtitle */
   pipelineBasinLabel?: string;
+  position?: HudPosition;
 }
 
 export const SAR_FLOOD_LEGEND_STEPS: {
@@ -40,12 +41,13 @@ export default function FloodLayerPanel({
   featureCount,
   floodedCount,
   pipelineBasinLabel = "EastCoast",
+  position = "topRight",
 }: Props) {
   return (
     <MapHudShell
       title="SAR Flood Detection"
       subtitle={`${pipelineBasinLabel} · Sentinel-1 VV Z-score`}
-      position="topRight"
+      position={position}
     >
       <div className="space-y-3">
         <div>
