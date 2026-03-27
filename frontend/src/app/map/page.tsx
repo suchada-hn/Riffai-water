@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { Layers, Loader2, RefreshCw } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
 import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
@@ -18,6 +18,7 @@ import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
 import MapDrawer from "@/components/map/ui/MapDrawer";
 import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
+import MapOperationsSummary from "@/components/map/MapOperationsSummary";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -461,26 +462,14 @@ function MapContent() {
             </section>
           )}
 
-          <section className="space-y-3">
-            <button onClick={refreshData} className="w-full btn-mono text-sm flex items-center justify-center gap-2">
-              <RefreshCw className="w-4 h-4" />
-              Refresh Data
-            </button>
-            {waterLevels && (
-              <div className="p-3 rounded-mono border border-primary-200 bg-primary-50">
-                <div className="text-xs font-semibold text-primary-700 uppercase tracking-wider mb-2">Summary</div>
-                <div className="space-y-1 text-sm text-primary-700">
-                  <div className="flex justify-between"><span>Stations</span><strong className="font-mono tabular-nums">{waterLevels.features?.length || 0}</strong></div>
-                  <div className="flex justify-between"><span>Critical</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "critical").length || 0}</strong></div>
-                  <div className="flex justify-between"><span>Warning</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "warning").length || 0}</strong></div>
-                  <div className="flex justify-between"><span>Watch</span><strong className="font-mono tabular-nums">{waterLevels.features?.filter(f => f.properties.risk_level === "watch").length || 0}</strong></div>
-                </div>
-                <div className="mt-2 text-xs text-primary-600 font-mono">
-                  Last update: {lastUpdate.toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })}
-                </div>
-              </div>
-            )}
-          </section>
+          <MapOperationsSummary
+            onwrAlerts={onwrAlerts}
+            tileSummary={tileSummary}
+            waterLevels={waterLevels}
+            lastUpdate={lastUpdate}
+            onRefresh={refreshData}
+            loading={loading}
+          />
         </MapDrawer>
 
         {layers.tambonFlood && (
