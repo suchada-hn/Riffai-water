@@ -10,6 +10,7 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
+import type { Layer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
@@ -65,6 +66,66 @@ function FlyTo({ center, zoom }: { center?: [number, number]; zoom?: number }) {
   return null;
 }
 
+function OnwrTiffBasemapLayer({
+  visible,
+  url,
+  opacity = 0.9,
+}: {
+  visible: boolean;
+  url: string;
+  opacity?: number;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!visible) return;
+
+    let cancelled = false;
+    let rasterLayer: Layer | null = null;
+
+    (async () => {
+      try {
+        const [{ default: parseGeoraster }, { default: GeoRasterLayer }] = await Promise.all([
+          import("georaster"),
+          import("georaster-layer-for-leaflet"),
+        ]);
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        const georaster = await parseGeoraster(arrayBuffer);
+        if (cancelled) return;
+
+        const layer = new GeoRasterLayer({
+          georaster,
+          opacity,
+          resolution: 256,
+        }) as Layer & { getBounds?: () => L.LatLngBounds };
+        layer.addTo(map);
+        rasterLayer = layer;
+
+        const bounds = layer.getBounds?.();
+        if (bounds?.isValid?.()) {
+          map.fitBounds(bounds, {
+            padding: [24, 24],
+            animate: false,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load ONWR TIFF basemap:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (rasterLayer) {
+        map.removeLayer(rasterLayer);
+      }
+    };
+  }, [map, opacity, visible, url]);
+
+  return null;
+}
+
 interface MapViewProps {
   basins?: GeoJSONFeatureCollection | null;
   waterLevels?: GeoJSONFeatureCollection | null;
@@ -80,6 +141,9 @@ interface MapViewProps {
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
   onFoliumFloodLoaded?: (featureCount: number) => void;
   layers: {
+    osmBasemap: boolean;
+    esriBasemap: boolean;
+    onwrTiffBasemap: boolean;
     basins: boolean;
     waterLevels: boolean;
     rivers: boolean;
@@ -178,7 +242,7 @@ export default function MapViewSimple({
       style={{ height: "100%", width: "100%" }}
       className="rounded-mono shadow-mono-lg"
     >
-      {layers.onwrSar ? (
+      {layers.esriBasemap ? (
         <>
           <TileLayer
             attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
@@ -190,6 +254,20 @@ export default function MapViewSimple({
             url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
             opacity={0.6}
+          />
+        </>
+      ) : layers.onwrTiffBasemap ? (
+        <>
+          <OnwrTiffBasemapLayer
+            visible={layers.onwrTiffBasemap}
+            url="/onwr-basemap-water-border-basin.tif"
+            opacity={0.9}
+          />
+          <TileLayer
+            attribution=""
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+            opacity={0.65}
           />
         </>
       ) : (

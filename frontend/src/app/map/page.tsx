@@ -50,6 +50,9 @@ function MapContent() {
     searchParams?.get("subbasin") || null,
   );
   const [layers, setLayers] = useState({
+    osmBasemap: true,
+    esriBasemap: false,
+    onwrTiffBasemap: false,
     basins: true,
     waterLevels: true,
     rivers: false,
@@ -65,6 +68,7 @@ function MapContent() {
     onwrNational: false,
     v3DailyValidation: true,
   });
+  const basemapKeys = ["osmBasemap", "esriBasemap", "onwrTiffBasemap"] as const;
   const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<
     number | null
   >(null);
@@ -311,6 +315,14 @@ function MapContent() {
       toast.error("เลือกลุ่มน้ำก่อนเปิดชั้นข้อมูล SAR");
       return;
     }
+    if (basemapKeys.includes(key as (typeof basemapKeys)[number])) {
+      setLayers((prev) => {
+        const next = { ...prev, osmBasemap: false, esriBasemap: false, onwrTiffBasemap: false };
+        next[key as (typeof basemapKeys)[number]] = true;
+        return next;
+      });
+      return;
+    }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -437,6 +449,39 @@ function MapContent() {
                 Choose a basin first to enable SAR sub-basin analysis.
               </div>
             )}
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">
+              Basemap
+            </h3>
+            <div className="space-y-2">
+              {[
+                {
+                  key: "osmBasemap" as const,
+                  label: "OpenStreetMap",
+                  description: "Standard OSM vector-cartography basemap",
+                },
+                {
+                  key: "esriBasemap" as const,
+                  label: "Esri Satellite",
+                  description: "High-resolution satellite imagery basemap",
+                },
+                {
+                  key: "onwrTiffBasemap" as const,
+                  label: "ONWR TIFF Basemap",
+                  description: "Local ONWR raster basemap (GeoTIFF)",
+                },
+              ].map(({ key, label, description }) => (
+                <LayerToggleRow
+                  key={key}
+                  checked={layers[key]}
+                  onToggle={() => toggle(key)}
+                  label={label}
+                  description={description}
+                />
+              ))}
+            </div>
           </section>
 
           <section className="space-y-3">
