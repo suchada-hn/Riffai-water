@@ -106,6 +106,7 @@ export default function TileDetailPanel({ tile, onClose }: TileDetailPanelProps)
                     tile.stats.trend === "down" ? TrendingDown : Minus;
 
   return (
+    <>
     <div className="fixed right-4 top-20 bottom-4 w-96 bg-white rounded-lg shadow-2xl z-[1000] flex flex-col overflow-hidden">
       {/* Header */}
       <div
@@ -364,13 +365,12 @@ export default function TileDetailPanel({ tile, onClose }: TileDetailPanelProps)
       </div>
     </div>
 
-    {/* Satellite Visualization Modal */}
     {showSatellite && (
       <SatelliteVisualization
         tileId={tile.id}
         onClose={() => setShowSatellite(false)}
       />
     )}
-  </div>
+    </>
   );
 }

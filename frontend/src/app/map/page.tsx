@@ -11,12 +11,10 @@ import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import { useRouter } from "next/navigation";
-
-const APP_TO_ONWR_BASIN: Record<string, string> = {
-  mekong_north: "UpperMekong",
-  eastern_coast: "EastCoast",
-  southern_east: "LowerSouthEast",
-};
+import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
+import { useFloodLayer } from "@/hooks/useFloodLayer";
+import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
+import { zscoreToColor } from "@/lib/onwrSarZscore";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -54,10 +52,17 @@ function MapContent() {
     timelapse: false,
     tambonFlood: false,
     onwrSar: false,
+    onwrNational: false,
   });
-  const [onwrDates, setOnwrDates] = useState<string[]>([]);
-  const [onwrDate, setOnwrDate] = useState<string | null>(null);
-  const [onwrFc, setOnwrFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const {
+    geojson: onwrFc,
+    dates: onwrDates,
+    selectedDate: onwrDate,
+    setSelectedDate: setOnwrDate,
+    loading: sarLoading,
+    loadingDates: sarLoadingDates,
+    error: sarError,
+  } = useFloodLayer(layers.onwrSar ? selectedBasin : null, layers.onwrSar);
   const [onwrNationalFc, setOnwrNationalFc] = useState<GeoJSONFeatureCollection | null>(null);
   const [onwrAlerts, setOnwrAlerts] = useState<
     {
@@ -112,62 +117,6 @@ function MapContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     syncUrl();
   }, [selectedBasin, selectedSubbasin]);
-
-  useEffect(() => {
-    if (!layers.onwrSar || !selectedBasin) {
-      setOnwrDates([]);
-      setOnwrFc(null);
-      return;
-    }
-    const pipe = APP_TO_ONWR_BASIN[selectedBasin];
-    if (!pipe) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await onwrAPI.dates(pipe);
-        const dates = (data.dates || []) as string[];
-        if (cancelled) return;
-        setOnwrDates(dates);
-        setOnwrDate((prev) => {
-          if (prev && dates.includes(prev)) return prev;
-          return dates.length ? dates[dates.length - 1] : null;
-        });
-      } catch {
-        if (!cancelled) {
-          setOnwrDates([]);
-          setOnwrFc(null);
-          toast.error("ไม่สามารถโหลดวันที่ ONWR ได้");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [layers.onwrSar, selectedBasin]);
-
-  useEffect(() => {
-    if (!layers.onwrSar || !selectedBasin || !onwrDate) {
-      if (!layers.onwrSar) setOnwrFc(null);
-      return;
-    }
-    const pipe = APP_TO_ONWR_BASIN[selectedBasin];
-    if (!pipe) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data } = await onwrAPI.stats(pipe, onwrDate);
-        if (!cancelled) setOnwrFc(data as GeoJSONFeatureCollection);
-      } catch {
-        if (!cancelled) {
-          setOnwrFc(null);
-          toast.error("ไม่สามารถโหลดสถิติ ONWR ได้ (ตรวจสอบ backend / GCS)");
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [layers.onwrSar, selectedBasin, onwrDate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -468,20 +417,33 @@ function MapContent() {
           {/* Flood Depth (if enabled) */}
           {(layers.onwrSar || layers.onwrNational) && (
             <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-mono">
-              <div className="text-xs font-medium text-sky-900 mb-2">ONWR Z-score (VV)</div>
+              <div className="text-xs font-medium text-sky-900 mb-2">
+                {layers.onwrSar ? "SAR Z-score (VV) — sub-basin" : "ONWR Z-score (national)"}
+              </div>
               <div className="space-y-1.5 text-[11px] text-sky-800">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-3 rounded" style={{ background: "#1e40af" }} />
-                  <span>Low z (wet / flood signal, z &lt; −3)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-3 rounded" style={{ background: "#facc15" }} />
-                  <span>Near baseline (~0)</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-3 rounded" style={{ background: "#b91c1c" }} />
-                  <span>High z (dry, z &gt; 3)</span>
-                </div>
+                {layers.onwrSar
+                  ? SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-3 rounded shrink-0 border border-sky-300"
+                          style={{ background: zscoreToColor(z) }}
+                        />
+                        <span>
+                          <span className="font-medium">{label}</span>{" "}
+                          <span className="text-sky-600 font-mono">{range}</span>
+                        </span>
+                      </div>
+                    ))
+                  : [
+                      { c: "#1e40af", label: "Low z (wet / flood signal, z ≤ −3)" },
+                      { c: "#facc15", label: "Near baseline (~0)" },
+                      { c: "#b91c1c", label: "High z (dry, z > 3)" },
+                    ].map(({ c, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div className="w-8 h-3 rounded" style={{ background: c }} />
+                        <span>{label}</span>
+                      </div>
+                    ))}
               </div>
             </div>
           )}
@@ -629,10 +591,29 @@ function MapContent() {
           dams={dams}
           selectedBasin={selectedBasin}
           onwrSarGeoJSON={onwrFc}
+          onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
           layers={layers}
         />
-        
+
+        {layers.onwrSar && selectedBasin && (
+          <FloodLayerPanel
+            dates={onwrDates}
+            selectedDate={onwrDate}
+            onDateChange={setOnwrDate}
+            loading={sarLoading}
+            loadingDates={sarLoadingDates}
+            error={sarError}
+            featureCount={onwrFc?.features?.length}
+            floodedCount={
+              onwrFc?.features?.filter((f) => f.properties?.flood_detected).length
+            }
+            pipelineBasinLabel={
+              APP_TO_ONWR_BASIN[selectedBasin] ?? selectedBasin
+            }
+          />
+        )}
+
         {/* Tambon Flood Layer */}
         {layers.tambonFlood && (
           <TambonFloodLayer

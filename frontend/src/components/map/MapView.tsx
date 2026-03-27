@@ -1,5 +1,7 @@
 "use client";
 
+/** Not used by `src/app/map/page.tsx` (that route loads `MapViewSimple`). */
+
 import { useEffect, useState } from "react";
 import {
   MapContainer,
@@ -447,7 +449,7 @@ export default function MapView({
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Cloud Cover</span>
-                      <span className="font-medium">< 5%</span>
+                      <span className="font-medium">&lt; 5%</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Last Update</span>

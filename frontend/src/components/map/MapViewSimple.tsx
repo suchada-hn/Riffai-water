@@ -14,6 +14,7 @@ import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
+import FloodLayerSAR from "./FloodLayerSAR";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -60,6 +61,8 @@ interface MapViewProps {
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
   onwrSarGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Active SAR stats date (YYYY-MM-DD); used for popups / layer key */
+  onwrSarDate?: string | null;
   /** National aggregate from GCS thailand_subbasin_stats.geojson (optional; may be filtered client-side) */
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
@@ -146,10 +149,26 @@ export default function MapViewSimple({
       style={{ height: "100%", width: "100%" }}
       className="rounded-lg shadow-lg"
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {layers.onwrSar ? (
+        <>
+          <TileLayer
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+          <TileLayer
+            attribution=""
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+            opacity={0.6}
+          />
+        </>
+      ) : (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+      )}
 
       {flyCenter && <FlyTo center={flyCenter} zoom={8} />}
 
@@ -290,35 +309,13 @@ export default function MapViewSimple({
           />
         )}
 
-      {/* ONWR SAR sub-basin z-score choropleth */}
       {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (
-        <GeoJSON
-          key={`onwr-${onwrSarGeoJSON.features.length}-${onwrSarGeoJSON.properties?.date ?? ""}`}
-          data={onwrSarGeoJSON}
-          style={(feature) => {
-            const z = feature?.properties?.mean_z_score as number | undefined;
-            const fill = zScoreChoroplethColor(z);
-            return {
-              color: "#1e3a8a",
-              weight: 1,
-              fillColor: fill,
-              fillOpacity: 0.55,
-            };
-          }}
-          onEachFeature={(feature, layer) => {
-            const p = feature.properties || {};
-            const z = p.mean_z_score;
-            const flood = p.flood_detected ? "Yes" : "No";
-            layer.bindPopup(`
-              <div class="text-sm min-w-[200px]">
-                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
-                <div>${p.NAME || p.name || ""}</div>
-                <div class="font-mono text-xs mt-1">Date: ${p.date ?? "—"}</div>
-                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
-                <div class="font-mono text-xs">Flood flag: <strong>${flood}</strong></div>
-              </div>
-            `);
-          }}
+        <FloodLayerSAR
+          geojson={onwrSarGeoJSON}
+          date={
+            onwrSarDate ??
+            String(onwrSarGeoJSON.properties?.date ?? "")
+          }
         />
       )}
 
@@ -328,11 +325,16 @@ export default function MapViewSimple({
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
+            const sar = layers.onwrSar;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: isSelected ? 0.15 : 0.08,
+              fillOpacity: sar
+                ? 0
+                : isSelected
+                  ? 0.15
+                  : 0.08,
               dashArray: isSelected ? undefined : "5 5",
             };
           }}
