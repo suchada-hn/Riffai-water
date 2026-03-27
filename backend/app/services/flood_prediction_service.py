@@ -96,7 +96,12 @@ class FloodPredictionService:
                 response = await client.get(f"{self.api_url}/top/{limit}")
                 
                 if response.status_code == 200:
-                    return response.json()
+                    data = response.json()
+                    if isinstance(data, dict) and "results" in data:
+                        return data["results"]
+                    if isinstance(data, list):
+                        return data
+                    return []
                 else:
                     return []
                     

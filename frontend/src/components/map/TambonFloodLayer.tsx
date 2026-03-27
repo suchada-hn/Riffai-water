@@ -97,7 +97,8 @@ export default function TambonFloodLayer({
             <div className="flex justify-between items-center mb-1">
               <span className="text-gray-600">Total Coverage</span>
               <span className="font-bold text-black">
-                {stats.total_tambons?.toLocaleString() || "6,363"} tambons
+                {(stats.total_sub_districts ?? stats.total_tambons)?.toLocaleString() || "6,363"}{" "}
+                tambons
               </span>
             </div>
           </div>
@@ -105,10 +106,11 @@ export default function TambonFloodLayer({
           {/* Risk Distribution */}
           <div className="space-y-1">
             {Object.entries(RISK_COLORS).map(([level, color]) => {
-              const count = stats.risk_distribution?.[level] || 0;
-              const percent = stats.total_tambons
-                ? ((count / stats.total_tambons) * 100).toFixed(1)
-                : "0";
+              const d = stats.risk_distribution || {};
+              const snake = level.toLowerCase() as keyof typeof d;
+              const count = Number(d[level] ?? d[snake] ?? 0) || 0;
+              const totalN = stats.total_sub_districts ?? stats.total_tambons ?? 0;
+              const percent = totalN ? ((count / totalN) * 100).toFixed(1) : "0";
 
               return (
                 <div key={level} className="flex items-center gap-2 text-xs">

@@ -5,10 +5,11 @@ import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Map as MapIcon, Layers, RefreshCw, Loader2 } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
-import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
+import { mapAPI, onwrAPI, pipelineAPI, tambonAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
+import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import { useRouter } from "next/navigation";
 import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
@@ -69,6 +70,14 @@ function MapContent() {
   const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(null);
   const [v3DailyLoading, setV3DailyLoading] = useState(false);
   const [v3DailyError, setV3DailyError] = useState<string | null>(null);
+  const [tambonFloodFc, setTambonFloodFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [tambonFloodLoading, setTambonFloodLoading] = useState(false);
+  const [tambonFloodError, setTambonFloodError] = useState<string | null>(null);
+  const [tambonFloodStats, setTambonFloodStats] = useState<{
+    total_sub_districts?: number;
+    total_tambons?: number;
+    risk_distribution?: Record<string, unknown>;
+  } | null>(null);
   const [onwrAlerts, setOnwrAlerts] = useState<
     {
       pipeline_basin: string;
@@ -198,6 +207,42 @@ function MapContent() {
       cancelled = true;
     };
   }, [layers.v3DailyValidation]);
+
+  useEffect(() => {
+    if (!layers.tambonFlood) {
+      setTambonFloodFc(null);
+      setTambonFloodError(null);
+      setTambonFloodStats(null);
+      return;
+    }
+    let cancelled = false;
+    setTambonFloodLoading(true);
+    setTambonFloodError(null);
+    (async () => {
+      try {
+        const [geoRes, statsRes] = await Promise.all([
+          tambonAPI.getMapGeoJSON({ limit: 1500 }),
+          tambonAPI.getStats(),
+        ]);
+        if (!cancelled) {
+          setTambonFloodFc(geoRes.data as GeoJSONFeatureCollection);
+          setTambonFloodStats(statsRes.data);
+        }
+      } catch {
+        if (!cancelled) {
+          setTambonFloodFc(null);
+          setTambonFloodStats(null);
+          setTambonFloodError("Could not load tambon flood map data");
+          toast.error("โหลดชั้น Tambon flood ไม่สำเร็จ");
+        }
+      } finally {
+        if (!cancelled) setTambonFloodLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.tambonFlood]);
 
   const onwrNationalFiltered = useMemo(() => {
     if (!onwrNationalFc?.features?.length) return null;
@@ -634,8 +679,18 @@ function MapContent() {
           onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
           v3DailyGeoJSON={v3DailyFc}
+          tambonFloodGeoJSON={tambonFloodFc}
           layers={layers}
         />
+
+        {layers.tambonFlood && (
+          <TambonFloodMapLegend
+            loading={tambonFloodLoading}
+            error={tambonFloodError}
+            stats={tambonFloodStats}
+            featureCount={tambonFloodFc?.features?.length}
+          />
+        )}
 
         {layers.v3DailyValidation && (
           <FloodV3ValidationLegend

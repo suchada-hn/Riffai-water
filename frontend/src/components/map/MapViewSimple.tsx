@@ -67,6 +67,8 @@ interface MapViewProps {
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   /** Static Folium-export validation points (TP/TN/FP/FN) */
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
+  /** XGBoost tambon flood points (from /api/flood/tambon/map/geojson) */
+  tambonFloodGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -125,6 +127,15 @@ const BASIN_CENTERS: Record<string, [number, number]> = {
   southern_east: [6.5, 101.0],
 };
 
+/** Matches [`TambonFloodLayer`](./TambonFloodLayer.tsx) */
+const TAMBON_RISK_FILL: Record<string, string> = {
+  VERY_HIGH: "#d73027",
+  HIGH: "#fc8d59",
+  MEDIUM: "#fee08b",
+  LOW: "#91cf60",
+  VERY_LOW: "#1a9850",
+};
+
 export default function MapViewSimple({
   basins,
   waterLevels,
@@ -135,10 +146,12 @@ export default function MapViewSimple({
   onwrSarDate,
   onwrNationalGeoJSON,
   v3DailyGeoJSON,
+  tambonFloodGeoJSON,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
   const [selectedTile, setSelectedTile] = useState<any>(null);
+  const useSatelliteBasemap = layers.onwrSar || layers.tambonFlood;
 
   // Dam icon
   const damIcon = L.divIcon({
@@ -153,8 +166,9 @@ export default function MapViewSimple({
       zoom={6}
       style={{ height: "100%", width: "100%" }}
       className="rounded-lg shadow-lg"
+      preferCanvas={Boolean(layers.tambonFlood)}
     >
-      {layers.onwrSar ? (
+      {useSatelliteBasemap ? (
         <>
           <TileLayer
             attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
@@ -350,18 +364,61 @@ export default function MapViewSimple({
           />
         )}
 
+      {layers.tambonFlood &&
+        tambonFloodGeoJSON &&
+        tambonFloodGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`tambon-flood-${tambonFloodGeoJSON.features.length}`}
+            data={tambonFloodGeoJSON}
+            pointToLayer={(feature, latlng) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const rl = String(p.risk_level ?? "");
+              const fill = TAMBON_RISK_FILL[rl] ?? "#64748b";
+              return L.circleMarker(latlng, {
+                radius: 7,
+                color: "rgba(255,255,255,0.85)",
+                weight: 1,
+                fillColor: fill,
+                fillOpacity: 0.78,
+                opacity: 0.95,
+              });
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const pct =
+                p.flood_percent != null && p.flood_percent !== ""
+                  ? Number(p.flood_percent).toFixed(1)
+                  : (Number(p.flood_probability) * 100).toFixed(1);
+              const prob =
+                p.flood_probability != null
+                  ? Number(p.flood_probability).toFixed(4)
+                  : "—";
+              layer.bindPopup(`
+              <div class="text-sm min-w-[220px]">
+                <div class="font-bold text-slate-900 border-b pb-1 mb-2">${String(p.tb_tn ?? "—")}</div>
+                <div class="text-xs text-slate-600">${String(p.ap_tn ?? "")} · ${String(p.pv_tn ?? "")}</div>
+                <div class="mt-2 font-mono text-xs">Risk: <strong>${String(p.risk_level ?? "—")}</strong></div>
+                <div class="font-mono text-xs">Flood %: ${pct}%</div>
+                <div class="font-mono text-xs">P(flood): ${prob}</div>
+                <div class="font-mono text-xs text-slate-500 mt-1">tb_idn: ${String(p.tb_idn ?? "—")}</div>
+              </div>
+            `);
+            }}
+          />
+        )}
+
       {/* Basin boundaries */}
       {layers.basins && basins && (
         <GeoJSON
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
-            const sar = layers.onwrSar;
+            const hideBasinFill = layers.onwrSar || layers.tambonFlood;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: sar
+              fillOpacity: hideBasinFill
                 ? 0
                 : isSelected
                   ? 0.15
