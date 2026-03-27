@@ -1,16 +1,21 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Map as MapIcon, Layers, RefreshCw, Loader2 } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
-import { mapAPI, pipelineAPI } from "@/services/api";
+import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import { useRouter } from "next/navigation";
+import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
+import { useFloodLayer } from "@/hooks/useFloodLayer";
+import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
+import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
+import { zscoreToColor } from "@/constants/onwrSarZscore";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -47,7 +52,33 @@ function MapContent() {
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
+    onwrSar: false,
+    onwrNational: false,
+    v3DailyValidation: false,
   });
+  const {
+    geojson: onwrFc,
+    dates: onwrDates,
+    selectedDate: onwrDate,
+    setSelectedDate: setOnwrDate,
+    loading: sarLoading,
+    loadingDates: sarLoadingDates,
+    error: sarError,
+  } = useFloodLayer(layers.onwrSar ? selectedBasin : null, layers.onwrSar);
+  const [onwrNationalFc, setOnwrNationalFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [v3DailyLoading, setV3DailyLoading] = useState(false);
+  const [v3DailyError, setV3DailyError] = useState<string | null>(null);
+  const [onwrAlerts, setOnwrAlerts] = useState<
+    {
+      pipeline_basin: string;
+      app_basin_id?: string;
+      HYBAS_ID?: number;
+      name?: string;
+      date: string;
+      mean_z_score?: number;
+    }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
@@ -93,6 +124,97 @@ function MapContent() {
   }, [selectedBasin, selectedSubbasin]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await onwrAPI.floodAlertsLatest(120);
+        if (!cancelled)
+          setOnwrAlerts(
+            [...(data.alerts || [])].sort(
+              (a: { mean_z_score?: number }, b: { mean_z_score?: number }) =>
+                (a.mean_z_score ?? 0) - (b.mean_z_score ?? 0)
+            )
+          );
+      } catch {
+        if (!cancelled) setOnwrAlerts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lastUpdate, layers.onwrSar]);
+
+  useEffect(() => {
+    if (!layers.onwrNational) {
+      setOnwrNationalFc(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await onwrAPI.thailandSubbasinStatsUrl();
+        const res = await fetch(data.url as string);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GeoJSONFeatureCollection;
+        if (!cancelled) setOnwrNationalFc(json);
+      } catch {
+        if (!cancelled) {
+          setOnwrNationalFc(null);
+          toast.error("ไม่สามารถโหลดชั้น Thailand SAR aggregate (GCS) ได้");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.onwrNational]);
+
+  useEffect(() => {
+    if (!layers.v3DailyValidation) {
+      setV3DailyFc(null);
+      setV3DailyError(null);
+      return;
+    }
+    let cancelled = false;
+    setV3DailyLoading(true);
+    setV3DailyError(null);
+    (async () => {
+      try {
+        const res = await fetch("/geojson/flood_v3_daily_validation.geojson");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GeoJSONFeatureCollection;
+        if (!cancelled) setV3DailyFc(json);
+      } catch {
+        if (!cancelled) {
+          setV3DailyFc(null);
+          setV3DailyError("Could not load V3 validation GeoJSON");
+          toast.error("โหลดชั้น V3 daily validation ไม่สำเร็จ");
+        }
+      } finally {
+        if (!cancelled) setV3DailyLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.v3DailyValidation]);
+
+  const onwrNationalFiltered = useMemo(() => {
+    if (!onwrNationalFc?.features?.length) return null;
+    if (!selectedBasin) return onwrNationalFc;
+    const pipe = APP_TO_ONWR_BASIN[selectedBasin];
+    const feats = onwrNationalFc.features.filter((f) => {
+      const p = (f.properties || {}) as Record<string, unknown>;
+      if (p.basin_app_id === selectedBasin) return true;
+      if (pipe && p.basin_en === pipe) return true;
+      return false;
+    });
+    return feats.length
+      ? { ...onwrNationalFc, type: "FeatureCollection" as const, features: feats }
+      : onwrNationalFc;
+  }, [onwrNationalFc, selectedBasin]);
+
+  useEffect(() => {
     const loadSub = async () => {
       if (!selectedBasin) {
         setSubbasins(null);
@@ -121,8 +243,39 @@ function MapContent() {
     }
   };
 
-  const toggle = (key: keyof typeof layers) =>
+  const toggle = (key: keyof typeof layers) => {
+    if (key === "onwrSar" && !selectedBasin) {
+      toast.error("เลือกลุ่มน้ำก่อนเปิดชั้นข้อมูล SAR");
+      return;
+    }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const exportOnwrCsv = () => {
+    if (!onwrFc?.features?.length) return;
+    const rows = onwrFc.features.map((f) => {
+      const p = f.properties || {};
+      return {
+        HYBAS_ID: p.HYBAS_ID,
+        name: p.NAME || p.name,
+        date: p.date,
+        mean_z_score: p.mean_z_score,
+        flood_detected: p.flood_detected,
+      };
+    });
+    const header = Object.keys(rows[0]);
+    const esc = (v: unknown) =>
+      `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [header.join(","), ...rows.map((r) => header.map((h) => esc(r[h as keyof typeof r])).join(","))].join(
+      "\n"
+    );
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `onwr_subbasin_${selectedBasin}_${onwrDate || "export"}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)]">
@@ -184,7 +337,13 @@ function MapContent() {
           <div className="space-y-2">
             {[
               { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
+              { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
               { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+              {
+                key: "v3DailyValidation" as const,
+                label: "V3 daily validation (TP/TN/FP/FN)",
+                description: "Static test-set snapshot — 6,363 tambon markers",
+              },
               { key: "timelapse" as const, label: "Time-lapse Animation", description: "Historical playback (7 days)" },
               { key: "basins" as const, label: "Basin Boundaries", description: "Administrative boundaries" },
               { key: "rivers" as const, label: "Rivers", description: "Major river systems" },
@@ -210,6 +369,61 @@ function MapContent() {
                 </div>
               </label>
             ))}
+          </div>
+        </div>
+
+        {layers.onwrSar && selectedBasin && (
+          <div className="mb-6 p-3 bg-sky-50 border border-sky-200 rounded-mono space-y-2">
+            <div className="text-xs font-semibold text-sky-900 uppercase tracking-wider">
+              ONWR date (≈6-day SAR cadence)
+            </div>
+            <select
+              value={onwrDate || ""}
+              onChange={(e) => setOnwrDate(e.target.value || null)}
+              className="input-mono text-sm w-full"
+              disabled={!onwrDates.length}
+            >
+              {onwrDates.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            {onwrFc && (
+              <button
+                type="button"
+                onClick={exportOnwrCsv}
+                className="w-full text-xs py-2 rounded-mono border border-sky-300 bg-white hover:bg-sky-100 text-sky-900 font-medium"
+              >
+                Download sub-basin CSV
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="mb-6">
+          <h3 className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
+            SAR flood anomalies (latest pass)
+          </h3>
+          <div className="max-h-48 overflow-y-auto space-y-1 text-xs border border-primary-100 rounded-mono p-2 bg-primary-50/50">
+            {onwrAlerts.length === 0 ? (
+              <span className="text-primary-500">No sub-basin alerts or data not loaded.</span>
+            ) : (
+              onwrAlerts.slice(0, 40).map((a, i) => (
+                <div
+                  key={`${a.HYBAS_ID}-${a.date}-${i}`}
+                  className="flex justify-between gap-2 py-1 border-b border-primary-100 last:border-0"
+                >
+                  <span className="truncate text-primary-800">
+                    {a.name || `HYBAS ${a.HYBAS_ID}`}
+                    <span className="text-primary-500 font-mono ml-1">{a.pipeline_basin}</span>
+                  </span>
+                  <span className="font-mono shrink-0 text-red-700">
+                    z={a.mean_z_score?.toFixed(2)}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -241,6 +455,39 @@ function MapContent() {
           </div>
 
           {/* Flood Depth (if enabled) */}
+          {(layers.onwrSar || layers.onwrNational) && (
+            <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-mono">
+              <div className="text-xs font-medium text-sky-900 mb-2">
+                {layers.onwrSar ? "SAR Z-score (VV) — sub-basin" : "ONWR Z-score (national)"}
+              </div>
+              <div className="space-y-1.5 text-[11px] text-sky-800">
+                {layers.onwrSar
+                  ? SAR_FLOOD_LEGEND_STEPS.map(({ range, label, z }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-3 rounded shrink-0 border border-sky-300"
+                          style={{ background: zscoreToColor(z) }}
+                        />
+                        <span>
+                          <span className="font-medium">{label}</span>{" "}
+                          <span className="text-sky-600 font-mono">{range}</span>
+                        </span>
+                      </div>
+                    ))
+                  : [
+                      { c: "#1e40af", label: "Low z (wet / flood signal, z ≤ −3)" },
+                      { c: "#facc15", label: "Near baseline (~0)" },
+                      { c: "#b91c1c", label: "High z (dry, z > 3)" },
+                    ].map(({ c, label }) => (
+                      <div key={label} className="flex items-center gap-2">
+                        <div className="w-8 h-3 rounded" style={{ background: c }} />
+                        <span>{label}</span>
+                      </div>
+                    ))}
+              </div>
+            </div>
+          )}
+
           {layers.floodDepth && (
             <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-mono">
               <div className="text-xs font-medium text-primary-700 mb-2">Flood Depth</div>
@@ -383,9 +630,39 @@ function MapContent() {
           rivers={rivers}
           dams={dams}
           selectedBasin={selectedBasin}
+          onwrSarGeoJSON={onwrFc}
+          onwrSarDate={onwrDate}
+          onwrNationalGeoJSON={onwrNationalFiltered}
+          v3DailyGeoJSON={v3DailyFc}
           layers={layers}
         />
-        
+
+        {layers.v3DailyValidation && (
+          <FloodV3ValidationLegend
+            featureCount={v3DailyFc?.features?.length}
+            loading={v3DailyLoading}
+            error={v3DailyError}
+          />
+        )}
+
+        {layers.onwrSar && selectedBasin && (
+          <FloodLayerPanel
+            dates={onwrDates}
+            selectedDate={onwrDate}
+            onDateChange={setOnwrDate}
+            loading={sarLoading}
+            loadingDates={sarLoadingDates}
+            error={sarError}
+            featureCount={onwrFc?.features?.length}
+            floodedCount={
+              onwrFc?.features?.filter((f) => f.properties?.flood_detected).length
+            }
+            pipelineBasinLabel={
+              APP_TO_ONWR_BASIN[selectedBasin] ?? selectedBasin
+            }
+          />
+        )}
+
         {/* Tambon Flood Layer */}
         {layers.tambonFlood && (
           <TambonFloodLayer

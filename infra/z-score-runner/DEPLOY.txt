@@ -1,0 +1,26 @@
+Cloud Run Job — ONWR Z-score runner
+====================================
+
+Build (from repo root):
+
+  docker build -t gcr.io/YOUR_PROJECT/onwr-z-score-runner -f infra/z-score-runner/Dockerfile infra/z-score-runner
+  docker push gcr.io/YOUR_PROJECT/onwr-z-score-runner
+
+Create job (single SAR asset per execution):
+
+  gcloud run jobs create onwr-z-score \
+    --image gcr.io/YOUR_PROJECT/onwr-z-score-runner \
+    --region asia-southeast1 \
+    --tasks 1 \
+    --max-retries 1 \
+    --task-timeout 3600 \
+    --set-env-vars BUCKET_NAME=onwr-data,Z_FLOOD_THRESHOLD=-3 \
+    --set-env-vars VV_BLOB=...,MEAN_BLOB=...,STD_BLOB=...,OUT_Z_BLOB=...,OUT_FLOOD_BLOB=...
+
+Or use Workflows / Scheduler to compute blob paths after s1-autofetch writes a new VV tile.
+
+Batch mode: set JOBS_JSON to a JSON array of
+  {"vv":"...","mean":"...","std":"...","out_z":"...","out_flood":"..."}
+and MAX_WORKERS (default 16).
+
+Service account needs storage.objects.get + storage.objects.create on gs://onwr-data/.

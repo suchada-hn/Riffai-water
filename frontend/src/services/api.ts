@@ -13,9 +13,9 @@ api.interceptors.request.use((config) => {
   // #region agent log
   if (typeof window !== "undefined") {
     const dbg = {
-      sessionId: "0ae64a",
-      runId: "pre-fix",
-      hypothesisId: "H1",
+      sessionId: "5f3060",
+      runId: "cors-debug",
+      hypothesisId: "H_browser_request",
       location: "frontend/src/services/api.ts:request-interceptor",
       message: "Axios request config (baseURL/url)",
       data: {
@@ -29,7 +29,7 @@ api.interceptors.request.use((config) => {
     };
     fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0ae64a" },
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "5f3060" },
       body: JSON.stringify(dbg),
     }).catch(() => {});
   }
@@ -50,19 +50,20 @@ api.interceptors.response.use(
       const cfg = error?.config;
       const resp = error?.response;
       const dbg = {
-        sessionId: "0ae64a",
-        runId: "pre-fix",
-        hypothesisId: "H2",
+        sessionId: "5f3060",
+        runId: "cors-debug",
+        hypothesisId: "H_axios_error",
         location: "frontend/src/services/api.ts:response-error-interceptor",
-        message: "Axios response error (network/config)",
+        message: "Axios error (CORS often => no response / Network Error)",
         data: {
           message: error?.message,
           code: error?.code,
           name: error?.name,
+          networkError: error?.message === "Network Error",
+          hasResponse: !!resp,
           baseURL: cfg?.baseURL,
-          url: cfg?.url,
+          fullUrl: cfg?.baseURL && cfg?.url ? `${cfg.baseURL}${cfg.url}` : cfg?.url,
           method: cfg?.method,
-          timeout: cfg?.timeout,
           status: resp?.status,
           statusText: resp?.statusText,
         },
@@ -70,7 +71,7 @@ api.interceptors.response.use(
       };
       fetch("http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "0ae64a" },
+        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "5f3060" },
         body: JSON.stringify(dbg),
       }).catch(() => {});
     }
@@ -118,6 +119,30 @@ export const mapAPI = {
     api.get(`/api/map/tiles/${tileId}/history`, { params: { days } }),
   tileSatellite: (tileId: string) =>
     api.get(`/api/map/tiles/${tileId}/satellite`),
+};
+
+/** ONWR Sentinel-1 zonal stats (pipeline basin names: UpperMekong, EastCoast, LowerSouthEast) */
+export const onwrAPI = {
+  dates: (basinEn: string) =>
+    api.get(`/api/basins/${encodeURIComponent(basinEn)}/dates`),
+  stats: (basinEn: string, date: string) =>
+    api.get(`/api/basins/${encodeURIComponent(basinEn)}/${date}/stats`),
+  floodAlertsLatest: (limit = 200) =>
+    api.get("/api/flood-alerts/latest", { params: { limit } }),
+  /** JSON with signed URL to ~26MB national GeoJSON on GCS */
+  thailandSubbasinStatsUrl: (expirationHours = 2) =>
+    api.get("/api/basins/onwr/thailand-subbasin-stats-url", {
+      params: { expiration_hours: expirationHours },
+    }),
+  /** Signed URL for Model_Output_test Z-Score GeoTIFF (not XYZ tiles — use GeoTIFF-aware map layer) */
+  zscoreRasterUrl: (params: {
+    basin_en: string;
+    date: string;
+    band?: string;
+    tile?: string;
+    expiration_hours?: number;
+  }) =>
+    api.get("/api/basins/onwr/zscore-raster-url", { params }),
 };
 
 // ═══════════ Prediction ═══════════

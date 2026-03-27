@@ -1,0 +1,6 @@
+{"type":"FeatureCollection","features":[
+  {"type":"Feature","properties":{"HYBAS_ID":6080940001,"NAME":"Test sub A"},
+   "geometry":{"type":"Polygon","coordinates":[[[99.8,19.45],[100.05,19.45],[100.05,19.65],[99.8,19.65],[99.8,19.45]]]}},
+  {"type":"Feature","properties":{"HYBAS_ID":6080940002,"NAME":"Test sub B"},
+   "geometry":{"type":"Polygon","coordinates":[[[100.0,19.5],[100.15,19.5],[100.15,19.6],[100.0,19.6],[100.0,19.5]]]}}
+]}

@@ -14,6 +14,7 @@ import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
+import FloodLayerSAR from "./FloodLayerSAR";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -59,6 +60,13 @@ interface MapViewProps {
   rivers?: GeoJSONFeatureCollection | null;
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
+  onwrSarGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Active SAR stats date (YYYY-MM-DD); used for popups / layer key */
+  onwrSarDate?: string | null;
+  /** National aggregate from GCS thailand_subbasin_stats.geojson (optional; may be filtered client-side) */
+  onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
+  /** Static Folium-export validation points (TP/TN/FP/FN) */
+  v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -69,7 +77,46 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    tambonFlood: boolean;
+    onwrSar: boolean;
+    onwrNational: boolean;
+    v3DailyValidation: boolean;
   };
+}
+
+function lerpChannel(a: number, b: number, t: number) {
+  return Math.round(a + (b - a) * Math.min(1, Math.max(0, t)));
+}
+
+export function zFromOnwrFeatureProperties(
+  p: Record<string, unknown> | undefined
+): number | null | undefined {
+  if (!p) return undefined;
+  for (const k of ["mean_z_score", "zscore", "z_score", "mean_z", "mean"]) {
+    const v = p[k];
+    if (v != null && v !== "" && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return undefined;
+}
+
+/** Blue (z &lt; -3) → yellow (~0) → red (z &gt; 3) */
+export function zScoreChoroplethColor(z: number | null | undefined): string {
+  if (z == null || Number.isNaN(Number(z))) return "#94a3b8";
+  const v = Number(z);
+  if (v <= -3) return "#1e40af";
+  if (v >= 3) return "#b91c1c";
+  if (v < 0) {
+    const t = (v + 3) / 3;
+    const r = lerpChannel(30, 250, t);
+    const g = lerpChannel(64, 204, t);
+    const b = lerpChannel(175, 21, t);
+    return `rgb(${r},${g},${b})`;
+  }
+  const t = v / 3;
+  const r = lerpChannel(250, 185, t);
+  const g = lerpChannel(204, 28, t);
+  const b = lerpChannel(21, 28, t);
+  return `rgb(${r},${g},${b})`;
 }
 
 const BASIN_CENTERS: Record<string, [number, number]> = {
@@ -84,6 +131,10 @@ export default function MapViewSimple({
   rivers,
   dams,
   selectedBasin,
+  onwrSarGeoJSON,
+  onwrSarDate,
+  onwrNationalGeoJSON,
+  v3DailyGeoJSON,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -103,10 +154,26 @@ export default function MapViewSimple({
       style={{ height: "100%", width: "100%" }}
       className="rounded-lg shadow-lg"
     >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
+      {layers.onwrSar ? (
+        <>
+          <TileLayer
+            attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+          />
+          <TileLayer
+            attribution=""
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+            maxZoom={19}
+            opacity={0.6}
+          />
+        </>
+      ) : (
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+      )}
 
       {flyCenter && <FlyTo center={flyCenter} zoom={8} />}
 
@@ -212,17 +279,93 @@ export default function MapViewSimple({
         );
       })}
 
+      {/* ONWR national sub-basin choropleth (under per-basin layer) */}
+      {layers.onwrNational &&
+        onwrNationalGeoJSON &&
+        onwrNationalGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`onwr-national-${onwrNationalGeoJSON.features.length}`}
+            data={onwrNationalGeoJSON}
+            style={(feature) => {
+              const z = zFromOnwrFeatureProperties(feature?.properties as Record<string, unknown>);
+              const fill = zScoreChoroplethColor(z);
+              return {
+                color: "#64748b",
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.4,
+              };
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const z = zFromOnwrFeatureProperties(p);
+              const flood =
+                p.flood_detected === true || (typeof z === "number" && z <= -3);
+              layer.bindPopup(`
+              <div class="text-sm min-w-[200px]">
+                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
+                <div>${String(p.NAME || p.name || p.basin_en || p.basin_th || "")}</div>
+                <div class="font-mono text-xs mt-1">Date: ${String(p.date ?? "—")}</div>
+                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
+                <div class="font-mono text-xs">Flood signal: <strong>${flood ? "Yes" : "No"}</strong></div>
+              </div>
+            `);
+            }}
+          />
+        )}
+
+      {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (
+        <FloodLayerSAR
+          geojson={onwrSarGeoJSON}
+          date={
+            onwrSarDate ??
+            String(onwrSarGeoJSON.properties?.date ?? "")
+          }
+        />
+      )}
+
+      {layers.v3DailyValidation &&
+        v3DailyGeoJSON &&
+        v3DailyGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`v3-daily-${v3DailyGeoJSON.features.length}`}
+            data={v3DailyGeoJSON}
+            pointToLayer={(feature, latlng) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const fill = String(p.fill ?? "#94a3b8");
+              return L.circleMarker(latlng, {
+                radius: 3,
+                color: fill,
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.8,
+                opacity: 1,
+              });
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const label = String(p.label ?? "");
+              if (label) layer.bindTooltip(label, { sticky: true, direction: "top", opacity: 0.95 });
+            }}
+          />
+        )}
+
       {/* Basin boundaries */}
       {layers.basins && basins && (
         <GeoJSON
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
+            const sar = layers.onwrSar;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: isSelected ? 0.15 : 0.08,
+              fillOpacity: sar
+                ? 0
+                : isSelected
+                  ? 0.15
+                  : 0.08,
               dashArray: isSelected ? undefined : "5 5",
             };
           }}

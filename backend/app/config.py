@@ -20,6 +20,20 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str = "riffai-platform"
     GCS_BUCKET_SATELLITE: str = "riffai-satellite-data"
     GCS_BUCKET_AI_MODELS: str = "riffai-ai-models"
+
+    # ONWR SAR zonal stats (GCS bucket used by Jupyter pipeline)
+    GCS_BUCKET_ONWR: str = "onwr-data"
+    ONWR_STATS_PREFIX: str = "Model_Output_v2_Stats/"
+    ONWR_STATS_GEOJSON_PREFIX: str = "Model_Output_v2_Stats_GeoJSON/"
+    # Nested GeoJSON from Jupyter: Model_Output_v2_Stats/{basin}/{year}/GeoJSON/SubBasin_ZScore_*.geojson
+    ONWR_STATS_DEFAULT_YEAR: int = 2026
+    ONWR_THAILAND_SUBBASIN_STATS_BLOB: str = "Agg_subbasin&Raster/thailand_subbasin_stats.geojson"
+    ONWR_ZSCORE_RASTER_PREFIX: str = "Model_Output_test"
+    ONWR_MODEL_VERSION: str = "v2"
+    # Optional: local directory with basin subfolders and CSV/GeoJSON for offline dev (see backend/tests/fixtures/onwr)
+    ONWR_DEV_FIXTURES_DIR: str = ""
+    # Optional: local HydroBASIN GeoJSON per pipeline basin name (e.g. hybas_UpperMekong.geojson)
+    ONWR_HYDRO_LOCAL_DIR: str = ""
     
     # Auth
     SECRET_KEY: str = "your-secret-key-change-in-production"

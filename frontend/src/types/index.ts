@@ -62,6 +62,7 @@ export interface PredictionResult {
 export interface GeoJSONFeatureCollection {
   type: "FeatureCollection";
   features: GeoJSONFeature[];
+  properties?: Record<string, unknown>;
 }
 
 export interface GeoJSONFeature {

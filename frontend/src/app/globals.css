@@ -176,3 +176,20 @@
 .divider-mono {
   @apply border-t border-gray-200 my-6;
 }
+
+/* SAR flood sub-basins — pulse on flood_detected polygons (Leaflet SVG path) */
+@keyframes sar-flood-pulse-kf {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.45));
+    opacity: 0.88;
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(250, 204, 21, 0.85));
+    opacity: 1;
+  }
+}
+
+.leaflet-overlay-pane svg path.sar-flood-pulse {
+  animation: sar-flood-pulse-kf 2.2s ease-in-out infinite;
+}

@@ -1,0 +1,4 @@
+{"type":"FeatureCollection","features":[
+  {"type":"Feature","properties":{"HYBAS_ID":6080900001,"NAME":"East coast placeholder"},
+   "geometry":{"type":"Polygon","coordinates":[[[101.2,12.4],[101.45,12.4],[101.45,12.6],[101.2,12.6],[101.2,12.4]]]}}
+]}
