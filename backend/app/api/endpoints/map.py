@@ -58,30 +58,50 @@ async def get_basins_geojson(db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to load basins: {str(e)}")
 
 
+def _annotate_subbasin_fc(fc: dict, basin_id: str) -> dict:
+    for f in fc.get("features", []):
+        props = f.get("properties") or {}
+        props.setdefault("basin_id", basin_id)
+        props.setdefault(
+            "subbasin_id",
+            props.get("id") or props.get("sub_id") or props.get("HYBAS_ID") or props.get("name") or None,
+        )
+        f["properties"] = props
+    return fc
+
+
 @router.get("/subbasins")
 async def get_subbasins_geojson(
     basin_id: str = Query(..., description="Basin id (e.g. mekong_north)"),
+    svc: OnwrStatsService = Depends(get_onwr_stats_service),
 ):
     """
     Sub-basin boundaries as GeoJSON FeatureCollection.
 
-    Expected file: backend/app/data/boundaries/subbasins_<basin_id>.geojson
+    Prefer local file backend/app/data/boundaries/subbasins_<basin_id>.geojson;
+    otherwise latest ONWR SubBasin_ZScore GeoJSON from GCS (same source as /api/basins/.../stats).
     """
     try:
         fc = load_subbasins_geojson(basin_id)
         if not fc:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Subbasins not found for basin_id={basin_id}. Expected file subbasins_{basin_id}.geojson",
-            )
+            pipeline = try_app_basin_to_pipeline(basin_id)
+            if pipeline:
+                dates = svc.list_dates(pipeline)
+                if dates:
+                    try:
+                        fc = svc.build_feature_collection(pipeline, dates[-1])
+                    except FileNotFoundError:
+                        fc = None
+            if not fc:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Subbasins not found for basin_id={basin_id}. "
+                        "No local subbasins_*.geojson and no GCS stats for this basin."
+                    ),
+                )
 
-        # Ensure stable fields exist (frontend filtering / selection)
-        for f in fc.get("features", []):
-            props = f.get("properties") or {}
-            props.setdefault("basin_id", basin_id)
-            props.setdefault("subbasin_id", props.get("id") or props.get("sub_id") or props.get("name") or None)
-            f["properties"] = props
-
+        _annotate_subbasin_fc(fc, basin_id)
         return fc
     except HTTPException:
         raise

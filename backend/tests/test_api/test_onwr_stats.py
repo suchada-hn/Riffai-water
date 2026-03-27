@@ -68,3 +68,13 @@ def test_map_flood_layer_app_basin(client):
 def test_unknown_basin(client):
     r = client.get("/api/basins/Nowhere/dates")
     assert r.status_code == 400
+
+
+def test_map_subbasins_fallback_from_onwr_stats(client):
+    """No local subbasins_*.geojson: should serve latest ONWR FeatureCollection."""
+    r = client.get("/api/map/subbasins", params={"basin_id": "mekong_north"})
+    assert r.status_code == 200
+    fc = r.json()
+    assert fc["type"] == "FeatureCollection"
+    assert len(fc["features"]) >= 1
+    assert fc["features"][0]["properties"].get("basin_id") == "mekong_north"

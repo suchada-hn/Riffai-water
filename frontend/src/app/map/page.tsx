@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Map as MapIcon, Layers, RefreshCw, Loader2 } from "lucide-react";
@@ -58,6 +58,7 @@ function MapContent() {
   const [onwrDates, setOnwrDates] = useState<string[]>([]);
   const [onwrDate, setOnwrDate] = useState<string | null>(null);
   const [onwrFc, setOnwrFc] = useState<GeoJSONFeatureCollection | null>(null);
+  const [onwrNationalFc, setOnwrNationalFc] = useState<GeoJSONFeatureCollection | null>(null);
   const [onwrAlerts, setOnwrAlerts] = useState<
     {
       pipeline_basin: string;
@@ -188,6 +189,46 @@ function MapContent() {
       cancelled = true;
     };
   }, [lastUpdate, layers.onwrSar]);
+
+  useEffect(() => {
+    if (!layers.onwrNational) {
+      setOnwrNationalFc(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await onwrAPI.thailandSubbasinStatsUrl();
+        const res = await fetch(data.url as string);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GeoJSONFeatureCollection;
+        if (!cancelled) setOnwrNationalFc(json);
+      } catch {
+        if (!cancelled) {
+          setOnwrNationalFc(null);
+          toast.error("ไม่สามารถโหลดชั้น Thailand SAR aggregate (GCS) ได้");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [layers.onwrNational]);
+
+  const onwrNationalFiltered = useMemo(() => {
+    if (!onwrNationalFc?.features?.length) return null;
+    if (!selectedBasin) return onwrNationalFc;
+    const pipe = APP_TO_ONWR_BASIN[selectedBasin];
+    const feats = onwrNationalFc.features.filter((f) => {
+      const p = (f.properties || {}) as Record<string, unknown>;
+      if (p.basin_app_id === selectedBasin) return true;
+      if (pipe && p.basin_en === pipe) return true;
+      return false;
+    });
+    return feats.length
+      ? { ...onwrNationalFc, type: "FeatureCollection" as const, features: feats }
+      : onwrNationalFc;
+  }, [onwrNationalFc, selectedBasin]);
 
   useEffect(() => {
     const loadSub = async () => {
@@ -425,7 +466,7 @@ function MapContent() {
           </div>
 
           {/* Flood Depth (if enabled) */}
-          {layers.onwrSar && (
+          {(layers.onwrSar || layers.onwrNational) && (
             <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-mono">
               <div className="text-xs font-medium text-sky-900 mb-2">ONWR Z-score (VV)</div>
               <div className="space-y-1.5 text-[11px] text-sky-800">
@@ -588,6 +629,7 @@ function MapContent() {
           dams={dams}
           selectedBasin={selectedBasin}
           onwrSarGeoJSON={onwrFc}
+          onwrNationalGeoJSON={onwrNationalFiltered}
           layers={layers}
         />
         

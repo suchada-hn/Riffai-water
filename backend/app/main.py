@@ -109,6 +109,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Debug inner, CORS outer (last added = first to run) so CORS wraps responses/errors from inner stack.
+app.add_middleware(_DebugCorsAuditMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -116,7 +118,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(_DebugCorsAuditMiddleware)
 
 # Routers
 app.include_router(auth.router, prefix="/api/auth", tags=["🔐 Auth"])

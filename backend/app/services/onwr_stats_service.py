@@ -26,6 +26,10 @@ from app.onwr_mapping import PIPELINE_TO_APP_BASIN, pipeline_to_app_basin
 from app.services.gcs_service import GCSService
 
 ISO_DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
+# SubBasin_ZScore_EastCoast_2026_03_24.geojson (and similar)
+SUBBASIN_ZSCORE_GEOJSON_DATE_RE = re.compile(
+    r"SubBasin_ZScore_.+_(\d{4})_(\d{2})_(\d{2})\.geojson$"
+)
 Z_FLOOD_THRESHOLD = -3.0
 _CACHE_TTL_SEC = 120.0
 _stats_cache: Dict[str, Tuple[float, Any]] = {}
@@ -46,6 +50,45 @@ def _cache_get(store: Dict[str, Tuple[float, Any]], key: str) -> Optional[Any]:
 
 def _cache_set(store: Dict[str, Tuple[float, Any]], key: str, val: Any) -> None:
     store[key] = (time.monotonic(), val)
+
+
+def _mean_z_from_properties(props: Dict[str, Any]) -> Optional[float]:
+    for k in (
+        "mean_z_score",
+        "mean_z",
+        "MEAN_Z",
+        "z_mean",
+        "zscore",
+        "z_score",
+        "mean",
+        "MEAN",
+    ):
+        if k in props and props[k] is not None and str(props[k]).strip() != "":
+            try:
+                return float(props[k])
+            except (TypeError, ValueError):
+                continue
+    return None
+
+
+def _nested_subbasin_zscore_blob(
+    stats_prefix: str,
+    pipeline_basin: str,
+    date_iso: str,
+    default_year: int,
+) -> str:
+    """GCS blob: Model_Output_v2_Stats/{basin}/{year}/GeoJSON/SubBasin_ZScore_{basin}_{Y}_{M}_{D}.geojson"""
+    pfx = stats_prefix if stats_prefix.endswith("/") else f"{stats_prefix}/"
+    parts = date_iso.split("-")
+    if len(parts) == 3 and all(p.isdigit() for p in parts):
+        y, mo, d = parts[0], parts[1], parts[2]
+    else:
+        y = str(default_year)
+        mo, d = "01", "01"
+    return (
+        f"{pfx}{pipeline_basin}/{y}/GeoJSON/"
+        f"SubBasin_ZScore_{pipeline_basin}_{y}_{mo}_{d}.geojson"
+    )
 
 
 class OnwrStatsService:
@@ -136,6 +179,18 @@ class OnwrStatsService:
             for m in ISO_DATE_RE.finditer(body[: min(5000, len(body))]):
                 dates.add(m.group(1))
 
+        if self.gcs.client:
+            prefix = f"{self._stats_prefix()}{pipeline_basin}/"
+            for name in self.gcs.list_files(self._bucket(), prefix):
+                if not name.lower().endswith(".geojson"):
+                    continue
+                if "SubBasin_ZScore" not in name:
+                    continue
+                m = SUBBASIN_ZSCORE_GEOJSON_DATE_RE.search(name.split("/")[-1])
+                if m:
+                    y, mo, d = m.group(1), m.group(2), m.group(3)
+                    dates.add(f"{y}-{mo}-{d}")
+
         result = sorted(dates)
         _cache_set(_dates_cache, ck, result)
         return result
@@ -188,13 +243,63 @@ class OnwrStatsService:
         blob = f"{self._geojson_prefix()}{pipeline_basin}/{date_iso}.geojson"
         if self.gcs.client and self.gcs.blob_exists(self._bucket(), blob):
             return self.gcs.download_geojson_dict(self._bucket(), blob)
+
+        nested = _nested_subbasin_zscore_blob(
+            self._stats_prefix(),
+            pipeline_basin,
+            date_iso,
+            self.settings.ONWR_STATS_DEFAULT_YEAR,
+        )
+        # _nested… returns path without bucket; stats prefix in settings includes trailing behavior
+        if self.gcs.client and self.gcs.blob_exists(self._bucket(), nested):
+            return self.gcs.download_geojson_dict(self._bucket(), nested)
+
         fix = self._fixture_base(pipeline_basin)
         if fix:
             fp = os.path.join(fix, f"{date_iso}.geojson")
             if os.path.isfile(fp):
                 with open(fp, encoding="utf-8") as f:
                     return json.load(f)
+            # Mirror nested layout locally: fixtures/UpperMekong/2026/GeoJSON/...
+            parts = date_iso.split("-")
+            if len(parts) == 3 and all(p.isdigit() for p in parts):
+                y, mo, d = parts[0], parts[1], parts[2]
+            else:
+                y = str(self.settings.ONWR_STATS_DEFAULT_YEAR)
+                mo, d = "01", "01"
+            nested_local = os.path.join(
+                fix,
+                y,
+                "GeoJSON",
+                f"SubBasin_ZScore_{pipeline_basin}_{y}_{mo}_{d}.geojson",
+            )
+            if os.path.isfile(nested_local):
+                with open(nested_local, encoding="utf-8") as f:
+                    return json.load(f)
         return None
+
+    def _enrich_feature_collection(
+        self, fc: dict, pipeline_basin: str, date_iso: str
+    ) -> dict:
+        """Ensure basin_app_id, date, mean_z_score alias, flood_detected for premade GCS GeoJSON."""
+        if fc.get("type") != "FeatureCollection":
+            return fc
+        app_basin = pipeline_to_app_basin(pipeline_basin)
+        for feat in fc.get("features", []):
+            props = dict(feat.get("properties") or {})
+            mz = _mean_z_from_properties(props)
+            if mz is not None:
+                props["mean_z_score"] = mz
+            flood = props.get("flood_detected")
+            if flood is None and mz is not None:
+                flood = mz < Z_FLOOD_THRESHOLD
+                props["flood_detected"] = bool(flood)
+            props.setdefault("basin_app_id", app_basin)
+            props.setdefault("pipeline_basin", pipeline_basin)
+            props.setdefault("date", date_iso)
+            props.setdefault("z_flood_threshold", Z_FLOOD_THRESHOLD)
+            feat["properties"] = props
+        return fc
 
     def _load_csv_for_date(self, pipeline_basin: str, date_iso: str) -> Optional[List[Dict[str, Any]]]:
         openers = []
@@ -231,6 +336,7 @@ class OnwrStatsService:
 
         premade = self._try_load_premade_geojson(pipeline_basin, date_iso)
         if premade and premade.get("type") == "FeatureCollection":
+            premade = self._enrich_feature_collection(premade, pipeline_basin, date_iso)
             _cache_set(_stats_cache, ck, premade)
             return premade
 

@@ -60,6 +60,8 @@ interface MapViewProps {
   dams?: GeoJSONFeatureCollection | null;
   selectedBasin?: string | null;
   onwrSarGeoJSON?: GeoJSONFeatureCollection | null;
+  /** National aggregate from GCS thailand_subbasin_stats.geojson (optional; may be filtered client-side) */
+  onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   layers: {
     basins: boolean;
     waterLevels: boolean;
@@ -70,12 +72,25 @@ interface MapViewProps {
     rainfall: boolean;
     heatmap: boolean;
     timelapse: boolean;
+    tambonFlood: boolean;
     onwrSar: boolean;
+    onwrNational: boolean;
   };
 }
 
 function lerpChannel(a: number, b: number, t: number) {
   return Math.round(a + (b - a) * Math.min(1, Math.max(0, t)));
+}
+
+export function zFromOnwrFeatureProperties(
+  p: Record<string, unknown> | undefined
+): number | null | undefined {
+  if (!p) return undefined;
+  for (const k of ["mean_z_score", "zscore", "z_score", "mean_z", "mean"]) {
+    const v = p[k];
+    if (v != null && v !== "" && !Number.isNaN(Number(v))) return Number(v);
+  }
+  return undefined;
 }
 
 /** Blue (z &lt; -3) → yellow (~0) → red (z &gt; 3) */
@@ -111,6 +126,7 @@ export default function MapViewSimple({
   dams,
   selectedBasin,
   onwrSarGeoJSON,
+  onwrNationalGeoJSON,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -238,6 +254,41 @@ export default function MapViewSimple({
           </Marker>
         );
       })}
+
+      {/* ONWR national sub-basin choropleth (under per-basin layer) */}
+      {layers.onwrNational &&
+        onwrNationalGeoJSON &&
+        onwrNationalGeoJSON.features?.length > 0 && (
+          <GeoJSON
+            key={`onwr-national-${onwrNationalGeoJSON.features.length}`}
+            data={onwrNationalGeoJSON}
+            style={(feature) => {
+              const z = zFromOnwrFeatureProperties(feature?.properties as Record<string, unknown>);
+              const fill = zScoreChoroplethColor(z);
+              return {
+                color: "#64748b",
+                weight: 0.5,
+                fillColor: fill,
+                fillOpacity: 0.4,
+              };
+            }}
+            onEachFeature={(feature, layer) => {
+              const p = (feature.properties || {}) as Record<string, unknown>;
+              const z = zFromOnwrFeatureProperties(p);
+              const flood =
+                p.flood_detected === true || (typeof z === "number" && z <= -3);
+              layer.bindPopup(`
+              <div class="text-sm min-w-[200px]">
+                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
+                <div>${String(p.NAME || p.name || p.basin_en || p.basin_th || "")}</div>
+                <div class="font-mono text-xs mt-1">Date: ${String(p.date ?? "—")}</div>
+                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
+                <div class="font-mono text-xs">Flood signal: <strong>${flood ? "Yes" : "No"}</strong></div>
+              </div>
+            `);
+            }}
+          />
+        )}
 
       {/* ONWR SAR sub-basin z-score choropleth */}
       {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (

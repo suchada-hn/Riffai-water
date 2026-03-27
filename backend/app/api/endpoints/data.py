@@ -147,14 +147,22 @@ async def get_rainfall_data(
         # #endregion
         raise
     
+    def _bucket_date_str(val) -> str:
+        # PostgreSQL date_trunc returns datetime; SQLite date()/strftime returns str
+        if val is None:
+            return ""
+        if hasattr(val, "isoformat"):
+            return val.isoformat()
+        return str(val)
+
     if aggregate == "daily":
         data = [
-            {"date": r[0].isoformat(), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
+            {"date": _bucket_date_str(r[0]), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
             for r in result
         ]
     elif aggregate == "monthly":
         data = [
-            {"date": (r[0].isoformat() if hasattr(r[0], "isoformat") else str(r[0])), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
+            {"date": _bucket_date_str(r[0]), "total_mm": r[1], "avg_mm": r[2], "max_mm": r[3]}
             for r in result
         ]
     else:

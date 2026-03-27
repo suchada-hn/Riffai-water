@@ -129,6 +129,20 @@ export const onwrAPI = {
     api.get(`/api/basins/${encodeURIComponent(basinEn)}/${date}/stats`),
   floodAlertsLatest: (limit = 200) =>
     api.get("/api/flood-alerts/latest", { params: { limit } }),
+  /** JSON with signed URL to ~26MB national GeoJSON on GCS */
+  thailandSubbasinStatsUrl: (expirationHours = 2) =>
+    api.get("/api/basins/onwr/thailand-subbasin-stats-url", {
+      params: { expiration_hours: expirationHours },
+    }),
+  /** Signed URL for Model_Output_test Z-Score GeoTIFF (not XYZ tiles — use GeoTIFF-aware map layer) */
+  zscoreRasterUrl: (params: {
+    basin_en: string;
+    date: string;
+    band?: string;
+    tile?: string;
+    expiration_hours?: number;
+  }) =>
+    api.get("/api/basins/onwr/zscore-raster-url", { params }),
 };
 
 // ═══════════ Prediction ═══════════
