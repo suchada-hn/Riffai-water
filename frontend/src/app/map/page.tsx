@@ -15,7 +15,7 @@ import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
 import FloodLayerPanel, { SAR_FLOOD_LEGEND_STEPS } from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
-import { zscoreToColor } from "@/lib/onwrSarZscore";
+import { zscoreToColor } from "@/constants/onwrSarZscore";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,

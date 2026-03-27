@@ -4,9 +4,9 @@ import { useCallback, useEffect } from "react";
 import { GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import type { GeoJSONFeatureCollection } from "@/types";
-import { zscoreToColor, zscoreToLabel } from "@/lib/onwrSarZscore";
+import { zscoreToColor, zscoreToLabel } from "@/constants/onwrSarZscore";
 
-export { zscoreToColor, zscoreToLabel } from "@/lib/onwrSarZscore";
+export { zscoreToColor, zscoreToLabel } from "@/constants/onwrSarZscore";
 
 function SarFitBounds({ data }: { data: GeoJSONFeatureCollection }) {
   const map = useMap();

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { zscoreToColor } from "@/lib/onwrSarZscore";
+import { zscoreToColor } from "@/constants/onwrSarZscore";
 
 interface Props {
   dates: string[];
