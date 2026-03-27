@@ -86,6 +86,9 @@ export default function TambonFloodMapLegend({
         <div style={{ color: "#64748b", fontSize: 11, marginBottom: 8 }}>
           14-day features · Terrain & history · Real forecast (operational model)
         </div>
+        <div style={{ color: "#64748b", fontSize: 11, marginBottom: 8 }}>
+          Tip: zoom in to see polygon choropleth.
+        </div>
         {loading ? (
           <div style={{ color: "#64748b" }}>Loading legend…</div>
         ) : error ? (

@@ -15,6 +15,7 @@ import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
 import FloodLayerSAR from "./FloodLayerSAR";
+import TambonFloodPolygons from "./TambonFloodPolygons";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -51,6 +52,19 @@ function FlyTo({ center, zoom }: { center?: [number, number]; zoom?: number }) {
       map.flyTo(center, zoom || 8, { duration: 1.5 });
     }
   }, [center, zoom, map]);
+  return null;
+}
+
+function TrackZoom({ onZoom }: { onZoom: (z: number) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const emit = () => onZoom(map.getZoom());
+    emit();
+    map.on("zoomend", emit);
+    return () => {
+      map.off("zoomend", emit);
+    };
+  }, [map, onZoom]);
   return null;
 }
 
@@ -152,6 +166,9 @@ export default function MapViewSimple({
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
   const [selectedTile, setSelectedTile] = useState<any>(null);
   const useSatelliteBasemap = layers.onwrSar || layers.tambonFlood;
+  const [zoom, setZoom] = useState<number>(6);
+  const showTambonPolygons = layers.tambonFlood && zoom >= 8;
+  const showTambonPoints = layers.tambonFlood && zoom < 8;
 
   // Dam icon
   const damIcon = L.divIcon({
@@ -168,6 +185,7 @@ export default function MapViewSimple({
       className="rounded-lg shadow-lg"
       preferCanvas={Boolean(layers.tambonFlood)}
     >
+      <TrackZoom onZoom={setZoom} />
       {useSatelliteBasemap ? (
         <>
           <TileLayer
@@ -364,7 +382,7 @@ export default function MapViewSimple({
           />
         )}
 
-      {layers.tambonFlood &&
+      {showTambonPoints &&
         tambonFloodGeoJSON &&
         tambonFloodGeoJSON.features?.length > 0 && (
           <GeoJSON
@@ -406,6 +424,8 @@ export default function MapViewSimple({
             }}
           />
         )}
+
+      <TambonFloodPolygons visible={showTambonPolygons} />
 
       {/* Basin boundaries */}
       {layers.basins && basins && (

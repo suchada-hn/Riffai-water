@@ -383,7 +383,7 @@ function MapContent() {
             {[
               { key: "heatmap" as const, label: "Flood Risk Heatmap", description: "Grid-based risk visualization" },
               { key: "onwrSar" as const, label: "ONWR SAR sub-basin (Z-score)", description: "Sentinel-1 zonal stats — HydroBASIN Lev09" },
-              { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost AI model (6,363 tambons)" },
+              { key: "tambonFlood" as const, label: "Tambon Flood Prediction", description: "XGBoost (points zoomed out • polygons zoomed in)" },
               {
                 key: "v3DailyValidation" as const,
                 label: "V3 daily validation (TP/TN/FP/FN)",
