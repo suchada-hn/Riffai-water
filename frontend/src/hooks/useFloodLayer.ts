@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import api, { mapAPI } from "@/services/api";
-import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
+import { dataClient } from "@/services/dataClient";
 import type { GeoJSONFeatureCollection } from "@/types";
 
 export interface FloodLayerState {
@@ -35,20 +34,10 @@ export function useFloodLayer(
       return;
     }
 
-    const pipelineName = APP_TO_ONWR_BASIN[basinId];
-    if (!pipelineName) {
-      setDates([]);
-      setSelectedDate(null);
-      setGeojson(null);
-      setError(null);
-      return;
-    }
-
     setLoadingDates(true);
-    api
-      .get<{ dates?: string[] }>(`/api/basins/${encodeURIComponent(pipelineName)}/dates`)
-      .then((res) => {
-        const d: string[] = res.data?.dates ?? [];
+    dataClient
+      .getOnwrDatesByAppBasin(basinId)
+      .then((d) => {
         setDates(d);
         if (d.length > 0) {
           setSelectedDate((prev) =>
@@ -64,15 +53,17 @@ export function useFloodLayer(
 
   const fetchLayer = useCallback(() => {
     if (!enabled || !basinId || !selectedDate) return;
-    if (!APP_TO_ONWR_BASIN[basinId]) return;
 
     setLoading(true);
     setError(null);
-    mapAPI
-      .floodLayer(basinId, selectedDate)
-      .then((res) => setGeojson(res.data as GeoJSONFeatureCollection))
+    dataClient
+      .getOnwrFloodLayerByAppBasin(basinId, selectedDate)
+      .then((fc) => setGeojson(fc as GeoJSONFeatureCollection))
       .catch((e: { response?: { data?: { detail?: string } } }) => {
-        setError(e?.response?.data?.detail ?? "Failed to load flood layer");
+        setError(
+          e?.response?.data?.detail ??
+            (e instanceof Error ? e.message : "Failed to load flood layer")
+        );
         setGeojson(null);
       })
       .finally(() => setLoading(false));

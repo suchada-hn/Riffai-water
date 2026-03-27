@@ -35,7 +35,7 @@ export default function Navbar() {
             </div>
             <div>
               <svg
-                className={"h-12 w-24"}
+                className="block h-12 w-24"
                 xmlns="http://www.w3.org/2000/svg"
                 version="1.0"
                 viewBox="0 0 308.000000 218.000000"

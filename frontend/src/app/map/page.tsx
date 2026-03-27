@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Layers, Loader2 } from "lucide-react";
 import Navbar from "@/components/common/Navbar";
-import { mapAPI, onwrAPI, pipelineAPI } from "@/services/api";
+import { dataClient, isStaticDataMode } from "@/services/dataClient";
 import { GeoJSONFeatureCollection } from "@/types";
 import toast from "react-hot-toast";
 import TambonFloodLayer from "@/components/map/TambonFloodLayer";
@@ -69,6 +69,8 @@ function MapContent() {
     v3DailyValidation: true,
   });
   const basemapKeys = ["osmBasemap", "esriBasemap", "onwrTiffBasemap"] as const;
+  /** When SAR is on but user keeps “All Basins”, load EastCoast pipeline (valid app basin id). */
+  const effectiveSarBasinId = selectedBasin ?? "eastern_coast";
   const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<
     number | null
   >(null);
@@ -80,7 +82,10 @@ function MapContent() {
     loading: sarLoading,
     loadingDates: sarLoadingDates,
     error: sarError,
-  } = useFloodLayer(layers.onwrSar ? selectedBasin : null, layers.onwrSar);
+  } = useFloodLayer(
+    layers.onwrSar ? effectiveSarBasinId : null,
+    layers.onwrSar,
+  );
   const [onwrNationalFc, setOnwrNationalFc] =
     useState<GeoJSONFeatureCollection | null>(null);
   const [v3DailyFc, setV3DailyFc] = useState<GeoJSONFeatureCollection | null>(
@@ -103,26 +108,25 @@ function MapContent() {
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [subbasinsLoading, setSubbasinsLoading] = useState(false);
-  const [needsBasinForSar, setNeedsBasinForSar] = useState(false);
 
   const loadMapData = async () => {
     try {
       const [b, w, r, d, ts] = await Promise.all([
-        mapAPI.basins(),
-        mapAPI.waterLevelMap(selectedBasin || undefined),
-        mapAPI.rivers(),
-        mapAPI.dams(),
-        mapAPI.tilesSummary({ basin_id: selectedBasin || undefined }),
+        dataClient.getBasins(),
+        dataClient.getWaterLevelMap(selectedBasin || undefined),
+        dataClient.getRivers(),
+        dataClient.getDams(),
+        dataClient.getTilesSummary(selectedBasin || undefined),
       ]);
-      setBasins(b.data);
-      setWaterLevels(w.data);
-      setRivers(r.data);
-      setDams(d.data);
-      setTileSummary(ts.data);
+      setBasins(b);
+      setWaterLevels(w);
+      setRivers(r);
+      setDams(d);
+      setTileSummary(ts);
       console.log("Map data loaded:", {
-        basins: b.data,
-        rivers: r.data,
-        dams: d.data,
+        basins: b,
+        rivers: r,
+        dams: d,
       });
     } catch (err) {
       console.error("Failed to load map data:", err);
@@ -183,10 +187,10 @@ function MapContent() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await onwrAPI.floodAlertsLatest(120);
+        const alerts = await dataClient.getOnwrFloodAlertsLatest(120);
         if (!cancelled)
           setOnwrAlerts(
-            [...(data.alerts || [])].sort(
+            [...alerts].sort(
               (a: { mean_z_score?: number }, b: { mean_z_score?: number }) =>
                 (a.mean_z_score ?? 0) - (b.mean_z_score ?? 0),
             ),
@@ -208,10 +212,8 @@ function MapContent() {
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await onwrAPI.thailandSubbasinStatsUrl();
-        const res = await fetch(data.url as string);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = (await res.json()) as GeoJSONFeatureCollection;
+        const json = await dataClient.getOnwrNationalStats();
+        if (!json) throw new Error("No national ONWR dataset found");
         if (!cancelled) setOnwrNationalFc(json);
       } catch {
         if (!cancelled) {
@@ -284,8 +286,8 @@ function MapContent() {
       }
       setSubbasinsLoading(true);
       try {
-        const res = await mapAPI.subbasins(selectedBasin);
-        setSubbasins(res.data);
+        const fc = await dataClient.getSubbasins(selectedBasin);
+        setSubbasins(fc);
       } catch {
         setSubbasins(null);
       } finally {
@@ -298,7 +300,13 @@ function MapContent() {
   const refreshData = async () => {
     toast.loading("กำลังดึงข้อมูลใหม่...", { id: "refresh" });
     try {
-      await pipelineAPI.fetchWater(selectedBasin || undefined);
+      if (isStaticDataMode()) {
+        toast("Static data mode: refresh uses local/remote files only.", {
+          id: "refresh-mode",
+        });
+      } else {
+        await dataClient.refreshWaterPipeline(selectedBasin || undefined);
+      }
       await loadMapData();
       setLastUpdate(new Date());
       toast.success("อัพเดทสำเร็จ!", { id: "refresh" });
@@ -308,13 +316,6 @@ function MapContent() {
   };
 
   const toggle = (key: keyof typeof layers) => {
-    if (key === "onwrSar" && !selectedBasin) {
-      setDrawerOpen(true);
-      setNeedsBasinForSar(true);
-      setTimeout(() => basinSelectRef.current?.focus(), 50);
-      toast.error("เลือกลุ่มน้ำก่อนเปิดชั้นข้อมูล SAR");
-      return;
-    }
     if (basemapKeys.includes(key as (typeof basemapKeys)[number])) {
       setLayers((prev) => {
         const next = { ...prev, osmBasemap: false, esriBasemap: false, onwrTiffBasemap: false };
@@ -323,12 +324,22 @@ function MapContent() {
       });
       return;
     }
+    if (key === "onwrSar") {
+      setLayers((prev) => {
+        const on = !prev.onwrSar;
+        if (!on) return { ...prev, onwrSar: false };
+        return {
+          ...prev,
+          onwrSar: true,
+          osmBasemap: false,
+          onwrTiffBasemap: false,
+          esriBasemap: true,
+        };
+      });
+      return;
+    }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
-
-  useEffect(() => {
-    if (selectedBasin) setNeedsBasinForSar(false);
-  }, [selectedBasin]);
 
   const exportOnwrCsv = () => {
     if (!onwrFc?.features?.length) return;
@@ -353,7 +364,7 @@ function MapContent() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `onwr_subbasin_${selectedBasin}_${onwrDate || "export"}.csv`;
+    a.download = `onwr_subbasin_${effectiveSarBasinId}_${onwrDate || "export"}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -444,11 +455,6 @@ function MapContent() {
                 ))}
               </select>
             </div>
-            {needsBasinForSar && (
-              <div className="rounded-mono border border-primary-200 bg-primary-50 px-3 py-2 text-xs text-primary-700">
-                Choose a basin first to enable SAR sub-basin analysis.
-              </div>
-            )}
           </section>
 
           <section className="space-y-3">
@@ -563,21 +569,23 @@ function MapContent() {
                   onToggle={() => toggle(key)}
                   label={label}
                   description={description}
-                  disabled={key === "onwrSar" && !selectedBasin}
-                  disabledReason={
-                    key === "onwrSar" && !selectedBasin
-                      ? "Select basin first"
-                      : undefined
-                  }
                 />
               ))}
             </div>
           </section>
 
-          {layers.onwrSar && selectedBasin && (
+          {layers.onwrSar && (
             <section className="space-y-2 p-3 border border-primary-200 bg-primary-50 rounded-mono">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-700">
                 ONWR date (≈6-day SAR cadence)
+                {!selectedBasin && (
+                  <span className="block font-normal text-primary-600 mt-1">
+                    Default pipeline:{" "}
+                    {APP_TO_ONWR_BASIN[effectiveSarBasinId] ??
+                      effectiveSarBasinId}{" "}
+                    — pick a basin to switch region
+                  </span>
+                )}
               </h3>
               <select
                 value={onwrDate || ""}
@@ -614,7 +622,7 @@ function MapContent() {
         </MapDrawer>
 
         <div className="absolute top-4 right-4 z-[1000] w-[min(92vw,22rem)] max-h-[calc(100%-2rem)] overflow-y-auto space-y-3 pointer-events-none">
-          {layers.onwrSar && selectedBasin && (
+          {layers.onwrSar && (
             <FloodLayerPanel
               dates={onwrDates}
               selectedDate={onwrDate}
@@ -628,7 +636,7 @@ function MapContent() {
                   .length
               }
               pipelineBasinLabel={
-                APP_TO_ONWR_BASIN[selectedBasin] ?? selectedBasin
+                APP_TO_ONWR_BASIN[effectiveSarBasinId] ?? effectiveSarBasinId
               }
               position="inline"
             />
