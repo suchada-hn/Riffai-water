@@ -60,7 +60,7 @@ function MapContent() {
     heatmap: true,
     timelapse: false,
     tambonFlood: false,
-    foliumFloodProbability: true,
+    foliumFloodProbability: false,
     onwrSar: false,
     onwrNational: false,
     v3DailyValidation: true,
