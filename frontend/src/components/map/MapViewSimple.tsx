@@ -248,12 +248,31 @@ export default function MapViewSimple({
             attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
             url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
+            eventHandlers={{
+              tileerror: (e) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H1_browserOfflineOrBlocked',location:'MapViewSimple.tsx:tileerror:esriImagery',message:'Esri imagery tileerror',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,url:(e as any)?.tile?.src||null,error:(e as any)?.error?String((e as any).error):null},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              },
+              load: () => {
+                // #region agent log
+                fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H2_tilesReachable',location:'MapViewSimple.tsx:load:esriImagery',message:'Esri imagery tile load event',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              },
+            }}
           />
           <TileLayer
             attribution=""
             url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
             opacity={0.6}
+            eventHandlers={{
+              tileerror: (e) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H1_browserOfflineOrBlocked',location:'MapViewSimple.tsx:tileerror:esriLabels',message:'Esri labels tileerror',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,url:(e as any)?.tile?.src||null,error:(e as any)?.error?String((e as any).error):null},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              },
+            }}
           />
         </>
       ) : layers.onwrTiffBasemap ? (
@@ -268,12 +287,26 @@ export default function MapViewSimple({
             url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
             maxZoom={19}
             opacity={0.65}
+            eventHandlers={{
+              tileerror: (e) => {
+                // #region agent log
+                fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H1_browserOfflineOrBlocked',location:'MapViewSimple.tsx:tileerror:esriLabelsOnTiff',message:'Esri labels tileerror (onwrTiffBasemap)',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,url:(e as any)?.tile?.src||null,error:(e as any)?.error?String((e as any).error):null},timestamp:Date.now()})}).catch(()=>{});
+                // #endregion
+              },
+            }}
           />
         </>
       ) : (
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          eventHandlers={{
+            tileerror: (e) => {
+              // #region agent log
+              fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H1_browserOfflineOrBlocked',location:'MapViewSimple.tsx:tileerror:osm',message:'OSM tileerror',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,url:(e as any)?.tile?.src||null,error:(e as any)?.error?String((e as any).error):null},timestamp:Date.now()})}).catch(()=>{});
+              // #endregion
+            },
+          }}
         />
       )}
 

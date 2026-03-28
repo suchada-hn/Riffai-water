@@ -19,7 +19,16 @@ class AIService:
         self.models = {}
         self.model_loaded = False
         self.gcs_bucket = os.getenv("GCS_BUCKET_AI_MODELS", "riffai-ai-models")
-        self._try_load_models()
+        # Backend startup should be fast/reliable; model loading can be slow (GCS/auth/tensorflow).
+        # Set RIFFAI_SKIP_AI_MODEL_LOAD=1 to defer model loading (rule-based fallback still works).
+        skip = os.getenv("RIFFAI_SKIP_AI_MODEL_LOAD", "").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        if not skip:
+            self._try_load_models()
     
     def _try_load_models(self):
         """Try to load trained models from Cloud Storage or local"""

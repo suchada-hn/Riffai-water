@@ -16,7 +16,18 @@ from app.services.onwr_stats_service import OnwrStatsService, get_onwr_stats_ser
 
 router = APIRouter()
 settings = get_settings()
-gcs = GCSService()
+_gcs: Optional[GCSService] = None
+
+
+def _get_gcs() -> GCSService:
+    """
+    Lazily construct the GCS client.
+    Creating `storage.Client()` can block on local auth/network; avoid doing it at import time.
+    """
+    global _gcs
+    if _gcs is None:
+        _gcs = GCSService()
+    return _gcs
 
 
 @router.get("/basins")

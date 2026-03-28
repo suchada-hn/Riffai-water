@@ -3,12 +3,25 @@ from fastapi.responses import RedirectResponse
 
 from app.config import get_settings
 from app.onwr_mapping import normalize_basin_key, pipeline_to_app_basin
+from typing import Optional
+
 from app.services.gcs_service import GCSService
 from app.services.onwr_stats_service import OnwrStatsService, get_onwr_stats_service
 
 router = APIRouter()
 _settings = get_settings()
-_gcs = GCSService()
+_gcs: Optional[GCSService] = None
+
+
+def _get_gcs() -> GCSService:
+    """
+    Lazily construct the GCS client.
+    Creating `storage.Client()` can block on local auth/network; avoid doing it at import time.
+    """
+    global _gcs
+    if _gcs is None:
+        _gcs = GCSService()
+    return _gcs
 
 
 def _normalize_raster_date(date: str) -> tuple[str, str]:
@@ -32,12 +45,13 @@ async def thailand_subbasin_stats_signed_url(
     Fetch that URL from the browser to avoid loading the file through this API.
     """
     blob = _settings.ONWR_THAILAND_SUBBASIN_STATS_BLOB
-    if not _gcs.client:
+    gcs = _get_gcs()
+    if not gcs.client:
         raise HTTPException(status_code=503, detail="GCS not configured")
-    if not _gcs.blob_exists(_settings.GCS_BUCKET_ONWR, blob):
+    if not gcs.blob_exists(_settings.GCS_BUCKET_ONWR, blob):
         raise HTTPException(status_code=404, detail="thailand_subbasin_stats.geojson not found in bucket")
     gcs_path = f"gs://{_settings.GCS_BUCKET_ONWR}/{blob}"
-    url = _gcs.get_signed_url(gcs_path, expiration_hours=expiration_hours)
+    url = gcs.get_signed_url(gcs_path, expiration_hours=expiration_hours)
     if not url:
         raise HTTPException(status_code=503, detail="Could not generate signed URL")
     return {"url": url, "expiration_hours": expiration_hours, "blob": blob}
@@ -49,12 +63,13 @@ async def thailand_subbasin_stats_redirect(
 ):
     """302 redirect to GCS signed URL for the national aggregate GeoJSON."""
     blob = _settings.ONWR_THAILAND_SUBBASIN_STATS_BLOB
-    if not _gcs.client:
+    gcs = _get_gcs()
+    if not gcs.client:
         raise HTTPException(status_code=503, detail="GCS not configured")
-    if not _gcs.blob_exists(_settings.GCS_BUCKET_ONWR, blob):
+    if not gcs.blob_exists(_settings.GCS_BUCKET_ONWR, blob):
         raise HTTPException(status_code=404, detail="thailand_subbasin_stats.geojson not found in bucket")
     gcs_path = f"gs://{_settings.GCS_BUCKET_ONWR}/{blob}"
-    url = _gcs.get_signed_url(gcs_path, expiration_hours=expiration_hours)
+    url = gcs.get_signed_url(gcs_path, expiration_hours=expiration_hours)
     if not url:
         raise HTTPException(status_code=503, detail="Could not generate signed URL")
     return RedirectResponse(url=url, status_code=302)

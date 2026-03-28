@@ -8,11 +8,27 @@ from app.models.models import SatelliteImage, WaterLevel, Rainfall, Station
 from app.services.satellite_service import SatelliteService
 from app.services.water_service import WaterService
 from app.config import get_settings
+from typing import Optional
 
 router = APIRouter()
 settings = get_settings()
-sat_service = SatelliteService()
-water_service = WaterService()
+_sat_service: Optional[SatelliteService] = None
+_water_service: Optional[WaterService] = None
+
+
+def _get_sat_service() -> SatelliteService:
+    # Avoid Earth Engine initialization at import time.
+    global _sat_service
+    if _sat_service is None:
+        _sat_service = SatelliteService()
+    return _sat_service
+
+
+def _get_water_service() -> WaterService:
+    global _water_service
+    if _water_service is None:
+        _water_service = WaterService()
+    return _water_service
 
 
 @router.post("/fetch-water")
@@ -27,6 +43,7 @@ async def fetch_water_data(
 
     for bid in basins:
         # ── Water Levels ──
+        water_service = _get_water_service()
         water_data = await water_service.fetch_water_levels(bid)
         for item in water_data:
             # Upsert station
@@ -89,6 +106,7 @@ async def fetch_satellite_data(
 
     for bid in basins:
         try:
+            sat_service = _get_sat_service()
             s2 = sat_service.fetch_sentinel2(bid, start, end)
             if s2.get("status") == "success":
                 db.add(SatelliteImage(
@@ -129,6 +147,7 @@ async def fetch_sar_data(
 
     for bid in basins:
         try:
+            sat_service = _get_sat_service()
             s1 = sat_service.fetch_sentinel1_sar(bid, start, end)
             if s1.get("status") == "success":
                 db.add(SatelliteImage(
@@ -160,6 +179,7 @@ async def fetch_historical(
 ):
     """ดึง time series ย้อนหลังสำหรับฝึก AI"""
     all_ts = []
+    sat_service = _get_sat_service()
     for year in range(start_year, end_year + 1):
         ts = sat_service.get_water_coverage_timeseries(
             basin_id, f"{year}-01-01", f"{year}-12-31", 16
@@ -186,6 +206,6 @@ async def fetch_historical(
 @router.get("/test-ee")
 async def test_earth_engine():
     """ทดสอบการเชื่อมต่อ Earth Engine"""
-    sat_service = SatelliteService()
+    sat_service = _get_sat_service()
     result = sat_service.test_connection()
     return result

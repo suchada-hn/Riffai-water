@@ -320,6 +320,9 @@ function MapContent() {
       setLayers((prev) => {
         const next = { ...prev, osmBasemap: false, esriBasemap: false, onwrTiffBasemap: false };
         next[key as (typeof basemapKeys)[number]] = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H3_toggleBasemap',location:'page.tsx:toggle:basemap',message:'Basemap toggled',data:{key,online:typeof navigator!=='undefined'?navigator.onLine:undefined,next:{osmBasemap:next.osmBasemap,esriBasemap:next.esriBasemap,onwrTiffBasemap:next.onwrTiffBasemap}},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         return next;
       });
       return;
@@ -327,14 +330,24 @@ function MapContent() {
     if (key === "onwrSar") {
       setLayers((prev) => {
         const on = !prev.onwrSar;
-        if (!on) return { ...prev, onwrSar: false };
-        return {
+        if (!on) {
+          const next = { ...prev, onwrSar: false };
+          // #region agent log
+          fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H4_toggleSar',location:'page.tsx:toggle:onwrSar:off',message:'ONWR SAR toggled OFF',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,selectedBasin, effectiveSarBasinId},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return next;
+        }
+        const next = {
           ...prev,
           onwrSar: true,
           osmBasemap: false,
           onwrTiffBasemap: false,
           esriBasemap: true,
         };
+        // #region agent log
+        fetch('http://127.0.0.1:7908/ingest/8ecea870-d1d6-42b5-905e-45e03cf5df70',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d844b9'},body:JSON.stringify({sessionId:'d844b9',runId:'pre-fix',hypothesisId:'H4_toggleSar',location:'page.tsx:toggle:onwrSar:on',message:'ONWR SAR toggled ON (forces Esri basemap)',data:{online:typeof navigator!=='undefined'?navigator.onLine:undefined,selectedBasin,effectiveSarBasinId,next:{onwrSar:next.onwrSar,esriBasemap:next.esriBasemap,osmBasemap:next.osmBasemap,onwrTiffBasemap:next.onwrTiffBasemap}},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return next;
       });
       return;
     }
