@@ -85,10 +85,11 @@ function OnwrTiffBasemapLayer({
 
     (async () => {
       try {
-        const [{ default: parseGeoraster }, { default: GeoRasterLayer }] = await Promise.all([
-          import("georaster"),
-          import("georaster-layer-for-leaflet"),
-        ]);
+        const [{ default: parseGeoraster }, { default: GeoRasterLayer }] =
+          await Promise.all([
+            import("georaster"),
+            import("georaster-layer-for-leaflet"),
+          ]);
         const response = await fetch(url);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
@@ -126,8 +127,182 @@ function OnwrTiffBasemapLayer({
   return null;
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function hashString(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
+function ensureBasinLinearGradient(
+  svg: SVGSVGElement,
+  gradId: string,
+  seed: number,
+) {
+  if (svg.querySelector(`#${CSS.escape(gradId)}`)) return;
+
+  let defs = svg.querySelector("defs");
+  if (!defs) {
+    defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+    svg.insertBefore(defs, svg.firstChild);
+  }
+
+  const lg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "linearGradient",
+  );
+  lg.setAttribute("id", gradId);
+  lg.setAttribute("gradientUnits", "objectBoundingBox");
+  const spread = (seed % 5) * 0.04;
+  lg.setAttribute("x1", "0");
+  lg.setAttribute("y1", "0");
+  lg.setAttribute("x2", String(0.62 + spread));
+  lg.setAttribute("y2", "1");
+
+  const mid = ["#7dd3fc", "#60a5fa", "#38bdf8", "#93c5fd", "#3b82f6"][seed % 5];
+
+  const stops: [string, string, string][] = [
+    ["0%", "#f8fafc", "0.38"],
+    ["40%", mid, "0.48"],
+    ["100%", "#0f172a", "0.52"],
+  ];
+
+  for (const [offset, color, op] of stops) {
+    const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+    stop.setAttribute("offset", offset);
+    stop.setAttribute("stop-color", color);
+    stop.setAttribute("stop-opacity", op);
+    lg.appendChild(stop);
+  }
+  defs.appendChild(lg);
+}
+
+function mapPopupRow(label: string, value: string) {
+  return `<div class="map-popup-row"><span class="map-popup-label">${escapeHtml(
+    label,
+  )}</span><span class="map-popup-value">${escapeHtml(value)}</span></div>`;
+}
+
+/** ONWR Thailand main basins: SVG gradient fill + themed tooltip/popup */
+function ThailandMainBasinsGeoJSON({
+  collection,
+  suppressFill,
+}: {
+  collection: GeoJSONFeatureCollection;
+  suppressFill: boolean;
+}) {
+  const map = useMap();
+
+  return (
+    <GeoJSON
+      key={`thailand-basins-${collection.features.length}-s${suppressFill ? 1 : 0}`}
+      data={collection}
+      style={() => ({
+        fillOpacity: 0,
+        weight: 1,
+        color: "#262626",
+        fillColor: "#e5e7eb",
+      })}
+      onEachFeature={(feature, layer) => {
+        const p = (feature.properties || {}) as Record<string, unknown>;
+        const rawId = String(p.id ?? "basin");
+        const gradId = `riffai_basin_${rawId.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+        const seed = hashString(rawId);
+
+        layer.on("add", () => {
+          const pane = map.getPane("overlayPane");
+          const svg = pane?.querySelector("svg") as SVGSVGElement | undefined;
+          if (svg) ensureBasinLinearGradient(svg, gradId, seed);
+          const pathish = layer as L.Layer & {
+            setStyle?: (s: L.PathOptions) => void;
+          };
+          if (suppressFill) {
+            pathish.setStyle?.({
+              fillOpacity: 0,
+              weight: 1.25,
+              color: "#404040",
+              opacity: 0.88,
+            });
+          } else {
+            pathish.setStyle?.({
+              fillColor: `url(#${gradId})`,
+              fillOpacity: 1,
+              weight: 1.25,
+              color: "#171717",
+              opacity: 0.92,
+            });
+          }
+        });
+
+        const name = String(
+          p.name ?? p.name_en ?? p.name_th ?? p.id ?? "",
+        ).trim();
+        const nameTh = String(p.name_th ?? "").trim();
+        const nameEn = String(p.name_en ?? "").trim();
+        const code = String(p.mb_code ?? "").trim();
+        const area = p.area_sqkm;
+        const areaStr =
+          area != null && area !== "" && !Number.isNaN(Number(area))
+            ? `${Number(area).toLocaleString()} ตร.กม.`
+            : "";
+
+        const tipParts: string[] = [
+          `<div class="map-tooltip-title">${escapeHtml(name || rawId)}</div>`,
+        ];
+        if (areaStr) {
+          tipParts.push(
+            `<div class="map-tooltip-meta">${escapeHtml(areaStr)}</div>`,
+          );
+        }
+        if (code) {
+          tipParts.push(
+            `<div class="map-tooltip-code">MB ${escapeHtml(code)}</div>`,
+          );
+        }
+
+        layer.bindTooltip(
+          `<div class="map-tooltip-panel">${tipParts.join("")}</div>`,
+          {
+            sticky: true,
+            direction: "top",
+            opacity: 1,
+            className: "map-tooltip-mono",
+          },
+        );
+
+        const rows: string[] = [];
+        if (nameTh && nameTh !== name)
+          rows.push(mapPopupRow("ชื่อ (ไทย)", nameTh));
+        if (nameEn && nameEn !== name)
+          rows.push(mapPopupRow("ชื่อ (EN)", nameEn));
+        // if (code) rows.push(mapPopupRow("รหัส MB", code));
+        if (areaStr) rows.push(mapPopupRow("พื้นที่", areaStr));
+
+        layer.bindPopup(
+          `<div class="map-popup-panel">
+            <div class="map-popup-title">${escapeHtml(name || rawId)}</div>
+            <div class="map-popup-subtitle">ลุ่มน้ำหลัก · ONWR (ชั้นภูมิศาสตร์)</div>
+            <div class="map-popup-rows">${rows.join("")}</div>
+          </div>`,
+        );
+      }}
+    />
+  );
+}
+
 interface MapViewProps {
   basins?: GeoJSONFeatureCollection | null;
+  /** ONWR main-basin polygons (national layer); visual only, not tied to selectedBasin */
+  thailandBasins?: GeoJSONFeatureCollection | null;
   waterLevels?: GeoJSONFeatureCollection | null;
   rivers?: GeoJSONFeatureCollection | null;
   dams?: GeoJSONFeatureCollection | null;
@@ -166,7 +341,7 @@ function lerpChannel(a: number, b: number, t: number) {
 }
 
 export function zFromOnwrFeatureProperties(
-  p: Record<string, unknown> | undefined
+  p: Record<string, unknown> | undefined,
 ): number | null | undefined {
   if (!p) return undefined;
   for (const k of ["mean_z_score", "zscore", "z_score", "mean_z", "mean"]) {
@@ -204,6 +379,7 @@ const BASIN_CENTERS: Record<string, [number, number]> = {
 
 export default function MapViewSimple({
   basins,
+  thailandBasins,
   waterLevels,
   rivers,
   dams,
@@ -298,6 +474,15 @@ export default function MapViewSimple({
         />
       )}
 
+      {layers.basins &&
+        thailandBasins &&
+        thailandBasins.features?.length > 0 && (
+          <ThailandMainBasinsGeoJSON
+            collection={thailandBasins}
+            suppressFill={layers.onwrSar || layers.foliumFloodProbability}
+          />
+        )}
+
       {/* Rivers */}
       {layers.rivers && rivers && (
         <GeoJSON
@@ -309,15 +494,26 @@ export default function MapViewSimple({
           })}
           onEachFeature={(feature, layer) => {
             const p = feature.properties;
+            const tribut =
+              Array.isArray(p.tributaries) && p.tributaries.length > 0
+                ? p.tributaries.join(", ")
+                : "";
+            const rows = [
+              p.name_en ? mapPopupRow("ชื่อ (EN)", String(p.name_en)) : "",
+              mapPopupRow(
+                "ความยาว",
+                `${p.length_km != null ? Number(p.length_km).toLocaleString() : "-"} km`,
+              ),
+              mapPopupRow("ลุ่มน้ำ (id)", String(p.basin_id ?? "-")),
+              tribut ? mapPopupRow("สาขา", tribut) : "",
+            ]
+              .filter(Boolean)
+              .join("");
             layer.bindPopup(`
-              <div class="text-sm min-w-[200px]">
-                <div class="font-bold text-lg mb-2 text-blue-900">${p.name}</div>
-                <div class="space-y-1">
-                  <div>${p.name_en}</div>
-                  <div>Length: ${p.length_km?.toLocaleString()} km</div>
-                  <div>Basin: ${p.basin_id}</div>
-                  ${p.tributaries?.length > 0 ? `<div>Tributaries: ${p.tributaries.join(", ")}</div>` : ''}
-                </div>
+              <div class="map-popup-panel">
+                <div class="map-popup-title">${escapeHtml(String(p.name ?? ""))}</div>
+                <div class="map-popup-subtitle">แม่น้ำสายหลัก</div>
+                <div class="map-popup-rows">${rows}</div>
               </div>
             `);
           }}
@@ -325,61 +521,68 @@ export default function MapViewSimple({
       )}
 
       {/* Dams */}
-      {layers.dams && dams && dams.features?.map((f, i) => {
-        const [lon, lat] = f.geometry.coordinates;
-        const p = f.properties;
-        if (selectedBasin && p.basin_id !== selectedBasin) return null;
-        
-        return (
-          <Marker
-            key={`dam-${i}`}
-            position={[lat, lon]}
-            icon={damIcon}
-          >
-            <Popup>
-              <div className="text-sm min-w-[250px]">
-                <div className="font-bold text-lg mb-3 text-primary-900 border-b pb-2">
-                  {p.name}
+      {layers.dams &&
+        dams &&
+        dams.features?.map((f, i) => {
+          const [lon, lat] = f.geometry.coordinates;
+          const p = f.properties;
+          if (selectedBasin && p.basin_id !== selectedBasin) return null;
+
+          return (
+            <Marker key={`dam-${i}`} position={[lat, lon]} icon={damIcon}>
+              <Popup>
+                <div className="map-popup-panel text-sm">
+                  <div className="map-popup-title">{p.name}</div>
+                  <div className="map-popup-subtitle">เขื่อน / อ่างเก็บน้ำ</div>
+                  <div className="map-popup-rows">
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">ชื่ออังกฤษ</span>
+                      <span className="map-popup-value">{p.name_en}</span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">แม่น้ำ</span>
+                      <span className="map-popup-value">{p.river}</span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">ความจุ</span>
+                      <span className="map-popup-value font-semibold">
+                        {p.capacity_mcm?.toLocaleString()} ล้าน ลบ.ม.
+                      </span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">ความสูง</span>
+                      <span className="map-popup-value">{p.height_m} ม.</span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">จังหวัด</span>
+                      <span className="map-popup-value">{p.province}</span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">สร้างเมื่อ</span>
+                      <span className="map-popup-value">
+                        พ.ศ. {p.year_built + 543}
+                      </span>
+                    </div>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">ประเภท</span>
+                      <span className="map-popup-value">
+                        <span className="inline-flex text-xs border border-gray-300 bg-gray-100 text-gray-800 px-2 py-0.5 rounded-mono">
+                          {p.type === "multipurpose"
+                            ? "อเนกประสงค์"
+                            : p.type === "hydropower"
+                              ? "ไฟฟ้าพลังน้ำ"
+                              : p.type === "irrigation"
+                                ? "ชลประทาน"
+                                : p.type}
+                        </span>
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">ชื่ออังกฤษ</span>
-                    <span className="font-medium">{p.name_en}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">แม่น้ำ</span>
-                    <span className="font-medium">{p.river}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">ความจุ</span>
-                    <span className="font-bold text-blue-600">{p.capacity_mcm?.toLocaleString()} ล้าน ลบ.ม.</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">ความสูง</span>
-                    <span className="font-medium">{p.height_m} ม.</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">จังหวัด</span>
-                    <span className="font-medium">{p.province}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">สร้างเมื่อ</span>
-                    <span className="font-medium">พ.ศ. {p.year_built + 543}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600">ประเภท</span>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {p.type === 'multipurpose' ? 'อเนกประสงค์' :
-                       p.type === 'hydropower' ? 'ไฟฟ้าพลังน้ำ' :
-                       p.type === 'irrigation' ? 'ชลประทาน' : p.type}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        );
-      })}
+              </Popup>
+            </Marker>
+          );
+        })}
 
       {/* ONWR national sub-basin choropleth (under per-basin layer) */}
       {layers.onwrNational &&
@@ -389,7 +592,9 @@ export default function MapViewSimple({
             key={`onwr-national-${onwrNationalGeoJSON.features.length}`}
             data={onwrNationalGeoJSON}
             style={(feature) => {
-              const z = zFromOnwrFeatureProperties(feature?.properties as Record<string, unknown>);
+              const z = zFromOnwrFeatureProperties(
+                feature?.properties as Record<string, unknown>,
+              );
               const fill = zScoreChoroplethColor(z);
               return {
                 color: "#64748b",
@@ -403,28 +608,36 @@ export default function MapViewSimple({
               const z = zFromOnwrFeatureProperties(p);
               const flood =
                 p.flood_detected === true || (typeof z === "number" && z <= -3);
+              const nm = String(
+                p.NAME || p.name || p.basin_en || p.basin_th || "",
+              );
+              const hy = String(p.HYBAS_ID ?? "—");
+              const dt = String(p.date ?? "—");
+              const zStr = z != null ? Number(z).toFixed(2) : "—";
               layer.bindPopup(`
-              <div class="text-sm min-w-[200px]">
-                <div class="font-bold text-slate-900 border-b pb-1 mb-2">HYBAS ${p.HYBAS_ID ?? "—"}</div>
-                <div>${String(p.NAME || p.name || p.basin_en || p.basin_th || "")}</div>
-                <div class="font-mono text-xs mt-1">Date: ${String(p.date ?? "—")}</div>
-                <div class="font-mono text-xs">Z-score: ${z != null ? Number(z).toFixed(2) : "—"}</div>
-                <div class="font-mono text-xs">Flood signal: <strong>${flood ? "Yes" : "No"}</strong></div>
+              <div class="map-popup-panel">
+                <div class="map-popup-title">HYBAS ${escapeHtml(hy)}</div>
+                <div class="map-popup-subtitle">Thailand SAR aggregate</div>
+                <div class="map-popup-rows">
+                  ${mapPopupRow("ชื่อ", nm)}
+                  ${mapPopupRow("วันที่", dt)}
+                  ${mapPopupRow("Z-score", zStr)}
+                  ${mapPopupRow("Flood signal", flood ? "Yes" : "No")}
+                </div>
               </div>
             `);
             }}
           />
         )}
 
-      {layers.onwrSar && onwrSarGeoJSON && onwrSarGeoJSON.features?.length > 0 && (
-        <FloodLayerSAR
-          geojson={onwrSarGeoJSON}
-          date={
-            onwrSarDate ??
-            String(onwrSarGeoJSON.properties?.date ?? "")
-          }
-        />
-      )}
+      {layers.onwrSar &&
+        onwrSarGeoJSON &&
+        onwrSarGeoJSON.features?.length > 0 && (
+          <FloodLayerSAR
+            geojson={onwrSarGeoJSON}
+            date={onwrSarDate ?? String(onwrSarGeoJSON.properties?.date ?? "")}
+          />
+        )}
 
       {layers.v3DailyValidation &&
         v3DailyGeoJSON &&
@@ -447,7 +660,18 @@ export default function MapViewSimple({
             onEachFeature={(feature, layer) => {
               const p = (feature.properties || {}) as Record<string, unknown>;
               const label = String(p.label ?? "");
-              if (label) layer.bindTooltip(label, { sticky: true, direction: "top", opacity: 0.95 });
+              if (label)
+                layer.bindTooltip(
+                  `<div class="map-tooltip-panel font-mono text-[11px]">${escapeHtml(
+                    label,
+                  )}</div>`,
+                  {
+                    sticky: true,
+                    direction: "top",
+                    opacity: 1,
+                    className: "map-tooltip-mono",
+                  },
+                );
             }}
           />
         )}
@@ -465,33 +689,30 @@ export default function MapViewSimple({
           data={basins}
           style={(feature) => {
             const isSelected = feature?.properties.id === selectedBasin;
-            const suppressFill = layers.onwrSar || layers.foliumFloodProbability;
+            const suppressFill =
+              layers.onwrSar || layers.foliumFloodProbability;
             return {
               color: isSelected ? "#1e40af" : "#3b82f6",
               weight: isSelected ? 3 : 2,
               fillColor: isSelected ? "#3b82f6" : "#60a5fa",
-              fillOpacity: suppressFill
-                ? 0
-                : isSelected
-                  ? 0.15
-                  : 0.08,
+              fillOpacity: suppressFill ? 0 : isSelected ? 0.15 : 0.08,
               dashArray: isSelected ? undefined : "5 5",
             };
           }}
           onEachFeature={(feature, layer) => {
             const p = feature.properties;
+            const prov = (p.provinces || []).join(", ") || "-";
+            const area =
+              p.area_sqkm != null
+                ? `${Number(p.area_sqkm).toLocaleString()} ตร.กม.`
+                : "-";
             layer.bindPopup(`
-              <div class="text-sm min-w-[250px]">
-                <div class="font-bold text-lg mb-3 text-primary-900 border-b pb-2">${p.name}</div>
-                <div class="space-y-2">
-                  <div class="flex justify-between items-center">
-                    <span class="text-gray-600">📍 จังหวัด</span>
-                    <span class="font-medium">${p.provinces?.join(", ") || "-"}</span>
-                  </div>
-                  <div class="flex justify-between items-center">
-                    <span class="text-gray-600">📐 พื้นที่</span>
-                    <span class="font-medium">${p.area_sqkm?.toLocaleString() || "-"} ตร.กม.</span>
-                  </div>
+              <div class="map-popup-panel">
+                <div class="map-popup-title">${escapeHtml(String(p.name ?? ""))}</div>
+                <div class="map-popup-subtitle">ลุ่มน้ำนำร่อง · API</div>
+                <div class="map-popup-rows">
+                  ${mapPopupRow("จังหวัด", prov)}
+                  ${mapPopupRow("พื้นที่", area)}
                 </div>
               </div>
             `);
@@ -504,7 +725,7 @@ export default function MapViewSimple({
           const [lon, lat] = f.geometry.coordinates;
           const p = f.properties;
           if (selectedBasin && p.basin_id !== selectedBasin) return null;
-          
+
           return (
             <Marker
               key={`water-${i}`}
@@ -512,24 +733,23 @@ export default function MapViewSimple({
               icon={stationIcon(p.risk_level)}
             >
               <Popup>
-                <div className="text-sm min-w-[250px]">
-                  <div className="font-bold text-lg mb-3 text-primary-900 border-b pb-2">
-                    {p.name}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Water Level</span>
-                      <span className="font-bold text-lg text-primary-900">
+                <div className="map-popup-panel text-sm">
+                  <div className="map-popup-title">{p.name}</div>
+                  <div className="map-popup-subtitle">สถานีระดับน้ำ</div>
+                  <div className="map-popup-rows">
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">ระดับน้ำ</span>
+                      <span className="map-popup-value font-semibold text-base">
                         {p.water_level_m?.toFixed(2)} m
                       </span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">Province</span>
-                      <span className="font-medium">{p.province}</span>
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">จังหวัด</span>
+                      <span className="map-popup-value">{p.province}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-600">⏰ เวลา</span>
-                      <span className="text-xs font-mono">
+                    <div className="map-popup-row">
+                      <span className="map-popup-label">เวลาวัด</span>
+                      <span className="map-popup-value text-xs font-mono">
                         {p.datetime
                           ? new Date(p.datetime).toLocaleString("th-TH", {
                               dateStyle: "short",
@@ -538,16 +758,16 @@ export default function MapViewSimple({
                           : "-"}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-gray-600">สถานะ</span>
-                      <span className="font-bold">
+                    <div className="map-popup-row border-t border-gray-200 pt-2 mt-1">
+                      <span className="map-popup-label">สถานะ</span>
+                      <span className="map-popup-value font-semibold">
                         {p.risk_level === "critical"
                           ? "Critical"
                           : p.risk_level === "warning"
-                          ? "Warning"
-                          : p.risk_level === "watch"
-                          ? "Watch"
-                          : "Normal"}
+                            ? "Warning"
+                            : p.risk_level === "watch"
+                              ? "Watch"
+                              : "Normal"}
                       </span>
                     </div>
                   </div>
