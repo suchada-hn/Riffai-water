@@ -35,6 +35,8 @@ function MapContent() {
   const router = useRouter();
   const basinSelectRef = useRef<HTMLSelectElement | null>(null);
   const [basins, setBasins] = useState<GeoJSONFeatureCollection | null>(null);
+  const [thailandBasins, setThailandBasins] =
+    useState<GeoJSONFeatureCollection | null>(null);
   const [waterLevels, setWaterLevels] =
     useState<GeoJSONFeatureCollection | null>(null);
   const [rivers, setRivers] = useState<GeoJSONFeatureCollection | null>(null);
@@ -159,6 +161,26 @@ function MapContent() {
       // ignore
     }
   }, [layers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/geojson/thailand_22_basins.geojson");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as GeoJSONFeatureCollection;
+        if (!cancelled) setThailandBasins(json);
+      } catch (err) {
+        console.error("Failed to load Thailand 22 basins GeoJSON:", err);
+        if (!cancelled) {
+          toast.error("โหลดชั้น 22 ลุ่มน้ำประเทศไทย ไม่สำเร็จ");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     loadMapData();
@@ -363,6 +385,7 @@ function MapContent() {
       <div className="absolute inset-0">
         <MapView
           basins={basins}
+          thailandBasins={thailandBasins}
           waterLevels={waterLevels}
           rivers={rivers}
           dams={dams}
@@ -524,7 +547,8 @@ function MapContent() {
                 {
                   key: "basins" as const,
                   label: "Basin Boundaries",
-                  description: "Administrative boundaries",
+                  description:
+                    "ONWR 22 main basins (static); pilot basin outline from API when selected",
                 },
                 {
                   key: "rivers" as const,

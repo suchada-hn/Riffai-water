@@ -102,6 +102,67 @@
   @apply bg-white border-gray-200;
 }
 
+/* Map tooltips — match card-mono / drawer typography */
+.leaflet-tooltip.map-tooltip-mono {
+  @apply rounded-mono border border-gray-200 bg-white shadow-mono-lg;
+  padding: 0;
+  border-width: 1px;
+  color: #171717;
+  font-family: Inter, system-ui, sans-serif;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.leaflet-tooltip.map-tooltip-mono::before {
+  border-top-color: #fff;
+}
+
+.map-tooltip-panel {
+  @apply px-3 py-2 max-w-[240px];
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.map-tooltip-title {
+  @apply font-semibold text-primary-900 leading-tight;
+}
+
+.map-tooltip-meta {
+  @apply text-xs text-gray-600 font-mono mt-1;
+}
+
+.map-tooltip-code {
+  @apply text-[10px] text-gray-500 uppercase tracking-wide mt-0.5;
+}
+
+/* String-based Leaflet popups — same language as Marker Popups (primary-900, gray labels) */
+.map-popup-panel {
+  @apply min-w-[240px] max-w-[280px];
+}
+
+.map-popup-title {
+  @apply font-bold text-base text-primary-900 border-b border-gray-200 pb-2 mb-1;
+}
+
+.map-popup-subtitle {
+  @apply text-[10px] font-medium uppercase tracking-wider text-gray-500 mb-3;
+}
+
+.map-popup-rows {
+  @apply flex flex-col gap-2;
+}
+
+.map-popup-row {
+  @apply flex justify-between items-start gap-3 text-sm;
+}
+
+.map-popup-label {
+  @apply text-gray-600 shrink-0;
+}
+
+.map-popup-value {
+  @apply font-medium text-primary-900 text-right;
+}
+
 /* Map point markers (DAM + water stations) */
 .map-marker-shell {
   display: inline-flex;
