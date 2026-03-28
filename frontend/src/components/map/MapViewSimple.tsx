@@ -16,7 +16,9 @@ import { GeoJSONFeatureCollection } from "@/types";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
 import FloodLayerSAR from "./FloodLayerSAR";
-import FoliumFloodProbabilityLayer from "./FoliumFloodProbabilityLayer";
+import FoliumFloodProbabilityLayer, {
+  type FoliumFloodLoadPayload,
+} from "./FoliumFloodProbabilityLayer";
 
 // Fix default icon
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -314,7 +316,7 @@ interface MapViewProps {
   onwrNationalGeoJSON?: GeoJSONFeatureCollection | null;
   /** Static Folium-export validation points (TP/TN/FP/FN) */
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
-  onFoliumFloodLoaded?: (featureCount: number) => void;
+  onFoliumFloodLoaded?: (payload: FoliumFloodLoadPayload) => void;
   layers: {
     osmBasemap: boolean;
     esriBasemap: boolean;

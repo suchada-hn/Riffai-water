@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Layers, Loader2 } from "lucide-react";
@@ -14,8 +21,8 @@ import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
 import FloodLayerPanel from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
-import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
 import FoliumFloodLegend from "../../components/map/FoliumFloodLegend";
+import type { FoliumFloodLoadPayload } from "@/components/map/FoliumFloodProbabilityLayer";
 import MapDrawer from "@/components/map/ui/MapDrawer";
 import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
@@ -71,9 +78,12 @@ function MapContent() {
     v3DailyValidation: true,
   });
   const basemapKeys = ["osmBasemap", "esriBasemap", "onwrTiffBasemap"] as const;
-  const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<
-    number | null
-  >(null);
+  const [foliumFloodHud, setFoliumFloodHud] =
+    useState<FoliumFloodLoadPayload | null>(null);
+
+  const handleFoliumFloodLoaded = useCallback((payload: FoliumFloodLoadPayload) => {
+    setFoliumFloodHud(payload);
+  }, []);
   const {
     geojson: onwrFc,
     dates: onwrDates,
@@ -345,7 +355,19 @@ function MapContent() {
       });
       return;
     }
-    setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+    setLayers((prev) => {
+      const nextOn = !prev[key];
+      const next = { ...prev, [key]: nextOn };
+      if (
+        nextOn &&
+        (key === "foliumFloodProbability" || key === "tambonFlood")
+      ) {
+        next.osmBasemap = false;
+        next.esriBasemap = true;
+        next.onwrTiffBasemap = false;
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -394,7 +416,7 @@ function MapContent() {
           onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
           v3DailyGeoJSON={v3DailyFc}
-          onFoliumFloodLoaded={(count) => setFoliumFloodFeatureCount(count)}
+          onFoliumFloodLoaded={handleFoliumFloodLoaded}
           layers={layers}
         />
 
@@ -526,13 +548,13 @@ function MapContent() {
                 },
                 {
                   key: "tambonFlood" as const,
-                  label: "Tambon Flood Prediction",
-                  description: "XGBoost AI model (6,363 tambons)",
+                  label: "Tambon flood sidebar",
+                  description: "Top risk list from static public/geojson (no API)",
                 },
                 {
                   key: "foliumFloodProbability" as const,
-                  label: "Folium Flood Probability (Tambon polygons)",
-                  description: "Standalone high-contrast polygon layer",
+                  label: "Folium flood polygons (map)",
+                  description: "Choropleth from static tambon_flood_probability_polygons.geojson",
                 },
                 {
                   key: "v3DailyValidation" as const,
@@ -657,18 +679,10 @@ function MapContent() {
               position="inline"
             />
           )}
-          {layers.tambonFlood && (
-            <TambonFloodMapLegend
-              loading={false}
-              error={null}
-              stats={null}
-              featureCount={undefined}
-              position="inline"
-            />
-          )}
           {layers.foliumFloodProbability && (
             <FoliumFloodLegend
-              featureCount={foliumFloodFeatureCount ?? undefined}
+              featureCount={foliumFloodHud?.featureCount}
+              bandCounts={foliumFloodHud?.bandCounts}
               position="inline"
             />
           )}
