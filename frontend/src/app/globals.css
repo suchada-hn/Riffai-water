@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700&family=IBM+Plex+Sans+Thai:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,258 +6,67 @@
 
 @layer base {
   :root {
-    --font-sans: ui-sans-serif, system-ui, -apple-system, "SF Pro Display",
-      "SF Pro Text", Inter, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, JetBrains Mono,
-      monospace;
-
-    /* Apple-inspired neutrals */
-    --bg: 0 0% 98.8%;
-    --fg: 0 0% 7%;
-    --muted: 0 0% 96.5%;
-    --muted-fg: 0 0% 42%;
-    --surface: 0 0% 100%;
-    --surface-2: 0 0% 98%;
-    --border: 0 0% 88%;
-    --ring: 0 0% 10%;
-
-    /* calm monochrome brand */
-    --primary: 0 0% 8%;
-    --primary-fg: 0 0% 100%;
-
-    --danger: 0 74% 50%;
-    --danger-fg: 0 0% 100%;
-
-    --radius: 14px;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 100%;
+    --secondary-foreground: 0 0% 0%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 100% 50%;       /* #FF0000 */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+    --ring: 0 0% 0%;
+    --radius: 0px;              /* ZERO — no rounded corners */
   }
 
   * {
-    @apply border-border;
+    border-color: hsl(var(--border));
+    border-radius: 0 !important;  /* enforce globally */
   }
 
   body {
-    @apply bg-bg text-fg antialiased;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    line-height: 24px;
+    background: #FFFFFF;
+    color: #000000;
     -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    @apply font-semibold tracking-tight;
-    text-wrap: balance;
-  }
-
-  p {
-    text-wrap: pretty;
-  }
-
-  :focus-visible {
-    outline: none;
+  /* Thai text */
+  [lang="th"], .thai {
+    font-family: 'IBM Plex Sans Thai', sans-serif;
   }
 }
 
-@layer components {
-  /* Premium primitives (mono classes map to these for global adoption) */
-  .card {
-    @apply bg-surface border border-border rounded-xl shadow-mono;
+/* Brutalist offset shadow utility */
+@layer utilities {
+  .shadow-brutal {
+    box-shadow: 4px 4px 0px 0px #000000;
   }
-
-  .card-hover {
-    @apply card transition-[transform,box-shadow,border-color] duration-200;
-    @apply hover:shadow-mono-lg hover:border-black/15;
+  .shadow-brutal-sm {
+    box-shadow: 2px 2px 0px 0px #000000;
   }
-
-  .btn {
-    @apply inline-flex items-center justify-center gap-2;
-    @apply min-h-10 px-4 py-2 rounded-xl font-medium;
-    @apply transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200;
-    @apply active:scale-[0.96] disabled:opacity-50 disabled:pointer-events-none;
+  .shadow-brutal-red {
+    box-shadow: 4px 4px 0px 0px #FF0000;
   }
-
-  .btn-primary {
-    @apply btn bg-primary text-primary-fg shadow-mono;
-    @apply hover:bg-black/90 hover:shadow-mono-lg;
+  .border-brutal {
+    border: 1px solid #000000;
   }
-
-  .btn-secondary {
-    @apply btn bg-soft text-fg border border-border;
-    @apply hover:bg-black/5 hover:border-black/15;
+  .border-brutal-2 {
+    border: 2px solid #000000;
   }
-
-  .btn-ghost {
-    @apply btn bg-transparent text-fg;
-    @apply hover:bg-black/5;
+  .invert-hover:hover {
+    background: #000000;
+    color: #FFFFFF;
   }
-
-  .input {
-    @apply w-full min-h-10 px-3 py-2 rounded-xl border border-border bg-surface text-fg;
-    @apply placeholder:text-muted-fg;
-    @apply transition-[box-shadow,border-color,background-color] duration-200;
-    @apply focus:border-black/20;
-  }
-
-  .input:focus-visible {
-    @apply ring-2 ring-ring/20 ring-offset-2 ring-offset-bg;
-  }
-
-  .badge {
-    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium;
-    @apply border border-border bg-surface text-fg;
-  }
-
-  .badge-solid {
-    @apply badge bg-primary text-primary-fg border-transparent;
-  }
-
-  .tabular {
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* Backwards compatible project classes */
-  .card-mono {
-    @apply card;
-  }
-
-  .card-mono-hover {
-    @apply card-hover;
-  }
-
-  .btn-mono {
-    @apply btn-primary;
-  }
-
-  .btn-mono-outline {
-    @apply btn-secondary;
-  }
-
-  .btn-mono-ghost {
-    @apply btn-ghost;
-  }
-
-  .input-mono {
-    @apply input;
-  }
-
-  .badge-mono {
-    @apply badge;
-  }
-
-  .badge-critical {
-    @apply badge-solid;
-  }
-
-  .badge-warning {
-    @apply badge bg-black/70 text-white border-transparent;
-  }
-
-  .badge-normal {
-    @apply badge bg-black/10 text-fg border-transparent;
-  }
-
-  .badge-safe {
-    @apply badge bg-soft text-muted-fg;
-  }
-}
-
-/* Leaflet overrides — use raw CSS so @apply does not depend on utilities outside @layer */
-.leaflet-container {
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  background-color: hsl(var(--muted));
-}
-
-.leaflet-popup-content-wrapper {
-  @apply rounded-xl shadow-mono-lg border border-border;
-}
-
-.leaflet-popup-content {
-  @apply text-sm text-fg;
-  margin: 12px;
-}
-
-.leaflet-popup-tip {
-  @apply bg-surface border-border;
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background-color: hsl(var(--muted));
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-black/20 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-black/30;
-}
-
-/* Loading animation (kept for compatibility) */
-@keyframes pulse-mono {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.95);
-  }
-}
-
-.animate-pulse-mono {
-  animation: pulse-mono 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}
-
-/* Table */
-.table-mono {
-  @apply w-full border-collapse;
-}
-
-.table-mono thead {
-  background-color: hsl(var(--muted));
-  @apply border-b border-border;
-}
-
-.table-mono th {
-  @apply px-4 py-3 text-left text-xs font-semibold text-fg uppercase tracking-wider;
-}
-
-.table-mono td {
-  @apply px-4 py-3 text-sm text-muted-fg border-b border-border;
-}
-
-.table-mono tbody tr {
-  @apply hover:bg-black/5 transition-colors duration-150;
-}
-
-/* Divider */
-.divider-mono {
-  @apply border-t border-border my-6;
 }
