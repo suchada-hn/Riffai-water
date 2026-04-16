@@ -40,7 +40,8 @@ export default function FoliumFloodLegend({
       dense
     >
       <div className="text-[11px] text-primary-600 mb-2">
-        Dark outlines + fill tuned for OSM and Esri satellite basemaps.
+        Dark outlines; polygon fills use shared SVG gradients per risk band (not
+        one gradient per polygon), tuned for OSM and Esri satellite basemaps.
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {STEPS.map((s) => (

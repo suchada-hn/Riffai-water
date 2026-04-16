@@ -13,6 +13,7 @@ import L from "leaflet";
 import type { Layer } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { GeoJSONFeatureCollection } from "@/types";
+import { escapeHtml, mapPopupRow } from "@/lib/mapLeafletHtml";
 import TileHeatmap from "./TileHeatmap";
 import TimelapseHeatmap from "./TimelapseHeatmap";
 import FloodLayerSAR from "./FloodLayerSAR";
@@ -129,14 +130,6 @@ function OnwrTiffBasemapLayer({
   return null;
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
 function hashString(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) {
@@ -186,12 +179,6 @@ function ensureBasinLinearGradient(
     lg.appendChild(stop);
   }
   defs.appendChild(lg);
-}
-
-function mapPopupRow(label: string, value: string) {
-  return `<div class="map-popup-row"><span class="map-popup-label">${escapeHtml(
-    label,
-  )}</span><span class="map-popup-value">${escapeHtml(value)}</span></div>`;
 }
 
 /** ONWR Thailand main basins: SVG gradient fill + themed tooltip/popup */
@@ -317,6 +304,9 @@ interface MapViewProps {
   /** Static Folium-export validation points (TP/TN/FP/FN) */
   v3DailyGeoJSON?: GeoJSONFeatureCollection | null;
   onFoliumFloodLoaded?: (payload: FoliumFloodLoadPayload) => void;
+  basemapMode?: "light" | "imagery";
+  onHeatmapTilesLoaded?: (tiles: any[]) => void;
+  heatmapFocusCenter?: [number, number] | null;
   layers: {
     osmBasemap: boolean;
     esriBasemap: boolean;
@@ -391,6 +381,9 @@ export default function MapViewSimple({
   onwrNationalGeoJSON,
   v3DailyGeoJSON,
   onFoliumFloodLoaded,
+  basemapMode = layers.esriBasemap || layers.onwrTiffBasemap ? "imagery" : "light",
+  onHeatmapTilesLoaded,
+  heatmapFocusCenter,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
@@ -413,6 +406,7 @@ export default function MapViewSimple({
     className: "",
   });
 
+  // Folium static flood polygons use SVG `url(#gradient)` fills; `preferCanvas` would drop those fills.
   return (
     <MapContainer
       center={[13.7, 100.5]}
@@ -464,6 +458,7 @@ export default function MapViewSimple({
           startDate={new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
           endDate={new Date()}
           basinId={selectedBasin}
+          basemapMode={basemapMode}
         />
       )}
 
@@ -473,6 +468,9 @@ export default function MapViewSimple({
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
           basinId={selectedBasin}
+          basemapMode={basemapMode}
+          onTilesLoaded={onHeatmapTilesLoaded as any}
+          focusCenter={heatmapFocusCenter ?? null}
         />
       )}
 

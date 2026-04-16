@@ -27,6 +27,9 @@ import MapDrawer from "@/components/map/ui/MapDrawer";
 import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import MapOperationsSummary from "@/components/map/MapOperationsSummary";
+import FloodRiskHeatmapPanel, {
+  type HeatmapTileLite,
+} from "@/components/map/FloodRiskHeatmapPanel";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -116,6 +119,10 @@ function MapContent() {
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [subbasinsLoading, setSubbasinsLoading] = useState(false);
   const [needsBasinForSar, setNeedsBasinForSar] = useState(false);
+  const [heatmapTiles, setHeatmapTiles] = useState<HeatmapTileLite[]>([]);
+  const [heatmapFocusCenter, setHeatmapFocusCenter] = useState<
+    [number, number] | null
+  >(null);
 
   const loadMapData = async () => {
     try {
@@ -402,6 +409,20 @@ function MapContent() {
     URL.revokeObjectURL(a.href);
   };
 
+  const basemapMode: "light" | "imagery" =
+    layers.esriBasemap || layers.onwrTiffBasemap ? "imagery" : "light";
+
+  const topHeatmapTiles = useMemo(() => {
+    if (!heatmapTiles.length) return [];
+    return [...heatmapTiles]
+      .sort(
+        (a, b) =>
+          Number(b.stats?.populationAtRisk ?? 0) -
+          Number(a.stats?.populationAtRisk ?? 0),
+      )
+      .slice(0, 10);
+  }, [heatmapTiles]);
+
   return (
     <div className="relative h-[calc(100vh-4rem)] bg-gray-50">
       <div className="absolute inset-0">
@@ -417,6 +438,9 @@ function MapContent() {
           onwrNationalGeoJSON={onwrNationalFiltered}
           v3DailyGeoJSON={v3DailyFc}
           onFoliumFloodLoaded={handleFoliumFloodLoaded}
+          basemapMode={basemapMode}
+          onHeatmapTilesLoaded={(tiles) => setHeatmapTiles(tiles as any)}
+          heatmapFocusCenter={heatmapFocusCenter}
           layers={layers}
         />
 
@@ -660,6 +684,16 @@ function MapContent() {
         </MapDrawer>
 
         <div className="absolute top-4 right-4 z-[1000] w-[min(92vw,22rem)] max-h-[calc(100%-2rem)] overflow-y-auto space-y-3 pointer-events-none">
+          {!layers.timelapse && layers.heatmap && (
+            <FloodRiskHeatmapPanel
+              tileSummary={tileSummary}
+              basinId={selectedBasin}
+              topTiles={topHeatmapTiles}
+              onFocusTile={(c) => setHeatmapFocusCenter(c)}
+              basemapMode={basemapMode}
+              position="inline"
+            />
+          )}
           {layers.onwrSar && selectedBasin && (
             <FloodLayerPanel
               dates={onwrDates}

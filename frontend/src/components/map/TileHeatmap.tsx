@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { GeoJSON, Popup, Tooltip, useMap } from "react-leaflet";
 import L from "leaflet";
 import { mapAPI } from "@/services/api";
@@ -39,10 +39,13 @@ interface TileFeature {
   };
 }
 
-interface TileHeatmapProps {
+export interface TileHeatmapProps {
   visible: boolean;
   onTileClick?: (tile: TileProperties) => void;
   basinId?: string | null;
+  basemapMode?: "light" | "imagery";
+  onTilesLoaded?: (tiles: TileProperties[]) => void;
+  focusCenter?: [number, number] | null;
 }
 
 const RISK_COLORS: Record<string, string> = {
@@ -61,41 +64,87 @@ const RISK_LABELS: Record<string, string> = {
   critical: "วิกฤต",
 };
 
-export default function TileHeatmap({ visible, onTileClick, basinId }: TileHeatmapProps) {
+export default function TileHeatmap({
+  visible,
+  onTileClick,
+  basinId,
+  basemapMode = "light",
+  onTilesLoaded,
+  focusCenter,
+}: TileHeatmapProps) {
   const [tiles, setTiles] = useState<TileFeature[]>([]);
   const [selectedTile, setSelectedTile] = useState<TileProperties | null>(null);
   const [loading, setLoading] = useState(true);
   const map = useMap();
+  const [zoom, setZoom] = useState<number>(() => map.getZoom());
 
-  useEffect(() => {
-    if (visible) {
-      loadTiles();
-    }
-  }, [visible, basinId]);
-
-  const loadTiles = async () => {
+  const loadTiles = useCallback(async () => {
     try {
       setLoading(true);
       const res = await mapAPI.tiles({ basin_id: basinId || undefined });
-      setTiles(res.data.features || []);
+      const feats = (res.data.features || []) as TileFeature[];
+      setTiles(feats);
+      onTilesLoaded?.(feats.map((f) => f.properties));
     } catch (error) {
       console.error("Failed to load tiles:", error);
     } finally {
       setLoading(false);
     }
+  }, [basinId, onTilesLoaded]);
+
+  useEffect(() => {
+    if (visible) loadTiles();
+  }, [visible, loadTiles]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const onZoom = () => setZoom(map.getZoom());
+    map.on("zoomend", onZoom);
+    return () => {
+      map.off("zoomend", onZoom);
+    };
+  }, [map, visible]);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (!focusCenter) return;
+    map.flyTo(focusCenter as L.LatLngExpression, Math.max(9, map.getZoom()), {
+      duration: 0.8,
+    });
+  }, [focusCenter, map, visible]);
+
+  const styleForContext = (riskLevel: string) => {
+    const color = RISK_COLORS[riskLevel] || "#94a3b8";
+    const isImagery = basemapMode === "imagery";
+    const z = zoom;
+    const fillOpacity = isImagery
+      ? z <= 6
+        ? 0.52
+        : z <= 8
+          ? 0.58
+          : 0.65
+      : z <= 6
+        ? 0.35
+        : z <= 8
+          ? 0.44
+          : 0.52;
+
+    const weight = z <= 6 ? 0.7 : z <= 8 ? 0.9 : 1.2;
+    const strokeOpacity = isImagery ? 0.9 : 0.75;
+    const strokeColor = isImagery ? "rgba(15,23,42,0.55)" : "rgba(15,23,42,0.25)";
+
+    return {
+      fillColor: color,
+      fillOpacity,
+      color: strokeColor,
+      weight,
+      opacity: strokeOpacity,
+    };
   };
 
   const getTileStyle = (feature: TileFeature) => {
     const riskLevel = feature.properties.riskLevel;
-    const color = RISK_COLORS[riskLevel] || "#94a3b8";
-    
-    return {
-      fillColor: color,
-      fillOpacity: 0.5,
-      color: color,
-      weight: 1,
-      opacity: 0.8,
-    };
+    return styleForContext(riskLevel);
   };
 
   const onEachFeature = (feature: TileFeature, layer: L.Layer) => {
@@ -106,16 +155,14 @@ export default function TileHeatmap({ visible, onTileClick, basinId }: TileHeatm
       mouseover: (e) => {
         const layer = e.target;
         layer.setStyle({
-          fillOpacity: 0.7,
-          weight: 2,
+          fillOpacity: styleForContext(props.riskLevel).fillOpacity + 0.12,
+          weight: Math.max(1.5, styleForContext(props.riskLevel).weight + 0.9),
+          opacity: 1,
         });
       },
       mouseout: (e) => {
         const layer = e.target;
-        layer.setStyle({
-          fillOpacity: 0.5,
-          weight: 1,
-        });
+        layer.setStyle(styleForContext(props.riskLevel));
       },
       click: () => {
         setSelectedTile(props);
@@ -130,16 +177,17 @@ export default function TileHeatmap({ visible, onTileClick, basinId }: TileHeatm
     // Tooltip on hover
     layer.bindTooltip(
       `
-      <div class="text-xs">
-        <div class="font-bold text-sm mb-1">${RISK_LABELS[props.riskLevel]}</div>
-        <div>💧 ${props.stats.avgWaterLevel.toFixed(1)} ม.</div>
-        <div>🌧️ ${props.stats.rainfall24h.toFixed(0)} มม.</div>
-        <div>📍 ${props.provinces.join(", ")}</div>
+      <div class="map-tooltip-panel">
+        <div class="map-tooltip-title">${RISK_LABELS[props.riskLevel] ?? props.riskLevel}</div>
+        <div class="map-tooltip-meta">
+          WL ${props.stats.avgWaterLevel.toFixed(1)} m · Rain ${props.stats.rainfall24h.toFixed(0)} mm
+        </div>
+        <div class="map-tooltip-code">${props.provinces.join(", ")}</div>
       </div>
       `,
       {
         sticky: true,
-        className: "tile-tooltip",
+        className: "map-tooltip-mono",
       }
     );
   };
@@ -159,93 +207,47 @@ export default function TileHeatmap({ visible, onTileClick, basinId }: TileHeatm
           position={selectedTile.center as L.LatLngExpression}
           onClose={() => setSelectedTile(null)}
         >
-          <div className="min-w-[300px] max-w-[400px]">
-            {/* Header */}
-            <div className="border-b pb-3 mb-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-lg">
-                  {RISK_LABELS[selectedTile.riskLevel]}
-                </h3>
-                <span
-                  className="px-2 py-1 rounded text-xs font-bold text-white"
-                  style={{ backgroundColor: RISK_COLORS[selectedTile.riskLevel] }}
-                >
-                  {selectedTile.riskLevel.toUpperCase()}
-                </span>
-              </div>
-              <div className="text-xs text-gray-600">
-                📍 {selectedTile.provinces.join(", ")}
-              </div>
+          <div className="map-popup-panel">
+            <div className="map-popup-title">
+              {RISK_LABELS[selectedTile.riskLevel] ?? selectedTile.riskLevel}
             </div>
-
-            {/* Stats */}
-            <div className="space-y-2 mb-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">💧 ระดับน้ำเฉลี่ย</span>
-                <span className="font-bold text-blue-600">
-                  {selectedTile.stats.avgWaterLevel.toFixed(2)} ม.
+            <div className="map-popup-subtitle">
+              {selectedTile.provinces?.slice(0, 3).join(", ") || "—"}
+            </div>
+            <div className="map-popup-rows">
+              <div className="map-popup-row">
+                <span className="map-popup-label">Avg water level</span>
+                <span className="font-mono tabular-nums text-primary-900">
+                  {selectedTile.stats.avgWaterLevel.toFixed(2)} m
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">🌧️ ฝน 24 ชม.</span>
-                <span className="font-bold text-blue-600">
-                  {selectedTile.stats.rainfall24h.toFixed(1)} มม.
+              <div className="map-popup-row">
+                <span className="map-popup-label">Rain (24h)</span>
+                <span className="font-mono tabular-nums text-primary-900">
+                  {selectedTile.stats.rainfall24h.toFixed(0)} mm
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">📈 แนวโน้ม</span>
-                <span className={`font-bold ${
-                  selectedTile.stats.trend === "up" ? "text-red-600" :
-                  selectedTile.stats.trend === "down" ? "text-green-600" :
-                  "text-gray-600"
-                }`}>
-                  {selectedTile.stats.trend === "up" ? "↗️" :
-                   selectedTile.stats.trend === "down" ? "↘️" : "→"}
-                  {" "}
-                  {selectedTile.stats.trend === "up" ? "เพิ่มขึ้น" :
-                   selectedTile.stats.trend === "down" ? "ลดลง" : "คงที่"}
-                  {" "}
-                  {Math.abs(selectedTile.stats.trendPercent)}%
+              <div className="map-popup-row">
+                <span className="map-popup-label">Stations</span>
+                <span className="font-mono tabular-nums text-primary-900">
+                  {selectedTile.stats.stationCount.toLocaleString()}
+                </span>
+              </div>
+              <div className="map-popup-row">
+                <span className="map-popup-label">Population at risk</span>
+                <span className="font-mono tabular-nums text-primary-900">
+                  ~{selectedTile.stats.populationAtRisk.toLocaleString()}
+                </span>
+              </div>
+              <div className="map-popup-row">
+                <span className="map-popup-label">AI flood probability</span>
+                <span className="font-mono tabular-nums text-primary-900">
+                  {selectedTile.aiPrediction.floodProbability.toFixed(0)}%
                 </span>
               </div>
             </div>
-
-            {/* Population at risk */}
-            {selectedTile.stats.populationAtRisk > 0 && (
-              <div className="bg-orange-50 border border-orange-200 rounded p-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">🏘️</span>
-                  <div>
-                    <div className="text-xs text-gray-600">ประชากรเสี่ยง</div>
-                    <div className="font-bold text-orange-700">
-                      ~{selectedTile.stats.populationAtRisk.toLocaleString()} คน
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* AI Prediction */}
-            {selectedTile.aiPrediction.floodProbability > 30 && (
-              <div className="bg-purple-50 border border-purple-200 rounded p-2 mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">🤖</span>
-                  <div className="flex-1">
-                    <div className="text-xs text-gray-600">AI Prediction</div>
-                    <div className="font-bold text-purple-700">
-                      {selectedTile.aiPrediction.floodProbability.toFixed(0)}% โอกาสน้ำท่วม
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      ใน {selectedTile.aiPrediction.daysAhead} วันข้างหน้า
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Stations */}
-            <div className="text-xs text-gray-500 border-t pt-2">
-              📡 {selectedTile.stats.stationCount} สถานีตรวจวัด
+            <div className="mt-3 pt-2 border-t border-gray-200 text-[10px] text-gray-500 font-mono">
+              tile_id={selectedTile.id} · updated {selectedTile.lastUpdate}
             </div>
           </div>
         </Popup>
