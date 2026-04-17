@@ -115,6 +115,7 @@ function MapContent() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [integrationStatus, setIntegrationStatus] = useState<any>(null);
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [subbasinsLoading, setSubbasinsLoading] = useState(false);
@@ -202,6 +203,21 @@ function MapContent() {
   useEffect(() => {
     loadMapData();
   }, [selectedBasin]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await pipelineAPI.status();
+        if (!cancelled) setIntegrationStatus(res.data);
+      } catch {
+        if (!cancelled) setIntegrationStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lastUpdate]);
 
   useEffect(() => {
     const syncUrl = () => {
@@ -465,6 +481,22 @@ function MapContent() {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">
               Location
             </h3>
+            {integrationStatus && (
+              <div className="rounded-mono border border-primary-200 bg-white px-3 py-2 text-[11px] text-primary-700">
+                <div className="font-semibold text-primary-900">Data freshness</div>
+                <div className="font-mono mt-1">
+                  Forecast:{" "}
+                  <strong>
+                    {integrationStatus?.gcs?.forecast?.fresh ? "fresh" : "stale"}
+                  </strong>
+                  {" · "}
+                  SAR:{" "}
+                  <strong>
+                    {integrationStatus?.gcs?.sar?.fresh ? "fresh" : "stale"}
+                  </strong>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
                 Select Basin

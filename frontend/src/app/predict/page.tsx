@@ -224,6 +224,14 @@ function PredictContent() {
                     <TrendingUp className="w-6 h-6" />
                     Prediction Results
                   </h3>
+                  <div className="mb-6 text-xs text-primary-600 font-mono">
+                    Source:{" "}
+                    <span className="font-semibold text-primary-900">
+                      {String(result.model_version || "").includes("onwr")
+                        ? "external ONWR forecast"
+                        : "AI fallback"}
+                    </span>
+                  </div>
 
                   {/* Big number */}
                   <div className="text-center mb-6 pb-6 border-b border-primary-200">

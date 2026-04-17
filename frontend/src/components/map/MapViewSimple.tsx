@@ -381,13 +381,16 @@ export default function MapViewSimple({
   onwrNationalGeoJSON,
   v3DailyGeoJSON,
   onFoliumFloodLoaded,
-  basemapMode = layers.esriBasemap || layers.onwrTiffBasemap ? "imagery" : "light",
+  basemapMode,
   onHeatmapTilesLoaded,
   heatmapFocusCenter,
   layers,
 }: MapViewProps) {
   const flyCenter = selectedBasin ? BASIN_CENTERS[selectedBasin] : undefined;
   const [selectedTile, setSelectedTile] = useState<any>(null);
+  const resolvedBasemapMode: "light" | "imagery" =
+    basemapMode ??
+    (layers.esriBasemap || layers.onwrTiffBasemap ? "imagery" : "light");
 
   // Dam icon
   const damIcon = L.divIcon({
@@ -458,7 +461,7 @@ export default function MapViewSimple({
           startDate={new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)}
           endDate={new Date()}
           basinId={selectedBasin}
-          basemapMode={basemapMode}
+          basemapMode={resolvedBasemapMode}
         />
       )}
 
@@ -468,7 +471,7 @@ export default function MapViewSimple({
           visible={layers.heatmap}
           onTileClick={(tile) => setSelectedTile(tile)}
           basinId={selectedBasin}
-          basemapMode={basemapMode}
+          basemapMode={resolvedBasemapMode}
           onTilesLoaded={onHeatmapTilesLoaded as any}
           focusCenter={heatmapFocusCenter ?? null}
         />

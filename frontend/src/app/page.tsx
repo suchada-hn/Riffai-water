@@ -17,11 +17,16 @@ export default function DashboardPage() {
   const [rainData, setRainData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [integrationStatus, setIntegrationStatus] = useState<any>(null);
 
   const loadData = async () => {
     try {
-      const res = await dashboardAPI.overview();
+      const [res, status] = await Promise.all([
+        dashboardAPI.overview(),
+        pipelineAPI.status().catch(() => null),
+      ]);
       setOverview(res.data);
+      setIntegrationStatus(status?.data ?? null);
 
       // ดึงข้อมูลกราฟของลุ่มน้ำแรก
       const firstBasin = res.data.basins?.[0]?.id;
@@ -95,6 +100,19 @@ export default function DashboardPage() {
                     })
                   : "—"}
               </p>
+              {integrationStatus && (
+                <div className="mt-2 text-xs text-primary-600 font-mono">
+                  Forecast feed:{" "}
+                  <span className="font-semibold text-primary-900">
+                    {integrationStatus?.gcs?.forecast?.fresh ? "fresh" : "stale"}
+                  </span>
+                  {" · "}
+                  SAR feed:{" "}
+                  <span className="font-semibold text-primary-900">
+                    {integrationStatus?.gcs?.sar?.fresh ? "fresh" : "stale"}
+                  </span>
+                </div>
+              )}
             </div>
             <button
               onClick={syncData}

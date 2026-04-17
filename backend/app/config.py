@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str = "riffai-platform"
     GCS_BUCKET_SATELLITE: str = "riffai-satellite-data"
     GCS_BUCKET_AI_MODELS: str = "riffai-ai-models"
+    # Dedicated SAR artifact bucket (Cloud Run job output)
+    GCS_BUCKET_SAR: str = "riffai-flood-sar-data"
 
     # ONWR SAR zonal stats (GCS bucket used by Jupyter pipeline)
     GCS_BUCKET_ONWR: str = "onwr-data"
@@ -34,6 +36,21 @@ class Settings(BaseSettings):
     ONWR_DEV_FIXTURES_DIR: str = ""
     # Optional: local HydroBASIN GeoJSON per pipeline basin name (e.g. hybas_UpperMekong.geojson)
     ONWR_HYDRO_LOCAL_DIR: str = ""
+
+    # External ONWR flood forecast feed (preferred prediction source when available)
+    ONWR_FORECAST_RESULTS_PREFIX: str = "flood_forecast_results/"
+    ONWR_FORECAST_MAX_AGE_HOURS: int = 12
+
+    # External SAR artifacts (optional, additive to ONWR zonal stats)
+    SAR_RESULTS_PREFIX: str = ""
+    SAR_MAX_AGE_HOURS: int = 48
+
+    # Cloud Run Jobs status (optional; disabled by default for local/dev)
+    CLOUD_RUN_STATUS_ENABLED: bool = False
+    CLOUD_RUN_PROJECT_ID: str = ""  # defaults to GCP_PROJECT_ID when unset
+    CLOUD_RUN_REGION: str = "asia-southeast1"
+    CLOUD_RUN_JOB_SAR_PIPELINE: str = "sar-pipeline-app-fetch-schedule"
+    CLOUD_RUN_JOB_ONWR_FORECAST_THAILAND: str = "onwr-flood-forecast-thailand"
     
     # Auth
     SECRET_KEY: str = "your-secret-key-change-in-production"

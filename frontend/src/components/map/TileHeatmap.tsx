@@ -205,7 +205,9 @@ export default function TileHeatmap({
       {selectedTile && (
         <Popup
           position={selectedTile.center as L.LatLngExpression}
-          onClose={() => setSelectedTile(null)}
+          eventHandlers={{
+            remove: () => setSelectedTile(null),
+          }}
         >
           <div className="map-popup-panel">
             <div className="map-popup-title">

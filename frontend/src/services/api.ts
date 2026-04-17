@@ -206,6 +206,7 @@ export const pipelineAPI = {
     api.post("/api/pipeline/fetch-satellite", null, {
       params: { basin_id: basinId },
     }),
+  status: () => api.get("/api/pipeline/status"),
 };
 
 // ═══════════ Reports ═══════════

@@ -276,7 +276,7 @@ export default function SatelliteVisualization({ tileId, onClose }: Props) {
                 <div key={index.key} className="text-center">
                   <div className="text-xs text-gray-600 mb-1">{index.label}</div>
                   <div className="text-2xl font-bold text-black mb-1">
-                    {data[index.key as keyof SatelliteData].toFixed(3)}
+                    {Number(data[index.key as keyof SatelliteData]).toFixed(3)}
                   </div>
                   <div className="text-xs text-gray-500">{index.desc}</div>
                 </div>

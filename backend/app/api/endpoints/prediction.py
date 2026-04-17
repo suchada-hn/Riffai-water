@@ -8,6 +8,7 @@ from app.models.models import Prediction, RiskLevel, SatelliteImage, WaterLevel,
 from app.services.ai_service import AIService
 from app.services.alert_service import AlertService
 from app.config import get_settings
+from app.services.forecast_integration_service import get_forecast_integration_service
 
 router = APIRouter()
 settings = get_settings()
@@ -26,6 +27,56 @@ async def predict_flood(
 
     now = datetime.utcnow()
     lookback = now - timedelta(days=90)
+
+    # Prefer external ONWR forecast feed when available (fallback to AIService when not).
+    forecast_svc = get_forecast_integration_service()
+    ext, artifact = forecast_svc.latest_forecast_for_basin(basin_id)
+    if ext and (forecast_svc.is_fresh(artifact) or artifact.updated is not None):
+        # Evaluate risk using the same logic; keep response shape stable.
+        risk = alert_service.evaluate_risk(
+            flood_probability=ext.flood_probability,
+            water_level=ext.predicted_water_level,
+        )
+
+        target_date = now + timedelta(days=days_ahead)
+        pred = Prediction(
+            basin_id=basin_id,
+            predict_date=now,
+            target_date=target_date,
+            flood_probability=ext.flood_probability,
+            risk_level=risk,
+            predicted_water_level=ext.predicted_water_level,
+            affected_area_sqkm=ext.affected_area_sqkm,
+            confidence=ext.confidence if ext.confidence is not None else 0,
+            model_version=ext.model_version or "onwr-forecast",
+            model_accuracy=None,
+        )
+        db.add(pred)
+        await db.commit()
+        await db.refresh(pred)
+
+        return {
+            "prediction_id": pred.id,
+            "basin_id": basin_id,
+            "basin_name": settings.BASINS[basin_id]["name"],
+            "predict_date": now.isoformat(),
+            "target_date": target_date.isoformat(),
+            "days_ahead": days_ahead,
+            "flood_probability": ext.flood_probability,
+            "risk_level": risk.value,
+            "predicted_water_level": ext.predicted_water_level,
+            "affected_area_sqkm": ext.affected_area_sqkm,
+            "confidence": ext.confidence,
+            "model_version": ext.model_version,
+            "input_summary": {
+                "satellite_records": 0,
+                "water_records": 0,
+                "rainfall_records": 0,
+                "external_forecast": True,
+                "external_forecast_time": ext.forecast_time.isoformat() if ext.forecast_time else None,
+                "external_artifact": artifact.to_meta(),
+            },
+        }
 
     # ดึง input data
     sat_data = (await db.execute(
