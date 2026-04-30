@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { GeoJSON } from "react-leaflet";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GeoJSON, useMap } from "react-leaflet";
 import L from "leaflet";
 import TimelapseControl from "./TimelapseControl";
 import { mapAPI } from "@/services/api";
@@ -11,6 +11,7 @@ interface TimelapseHeatmapProps {
   startDate: Date;
   endDate: Date;
   basinId?: string | null;
+  basemapMode?: "light" | "imagery";
 }
 
 const RISK_COLORS: Record<string, string> = {
@@ -26,6 +27,7 @@ export default function TimelapseHeatmap({
   startDate,
   endDate,
   basinId,
+  basemapMode = "light",
 }: TimelapseHeatmapProps) {
   const [currentDate, setCurrentDate] = useState(endDate);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,12 +35,40 @@ export default function TimelapseHeatmap({
   const [tiles, setTiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const map = useMap();
+  const [zoom, setZoom] = useState<number>(() => map.getZoom());
+
+  const loadTilesForDate = useCallback(
+    async (date: Date) => {
+      try {
+        setLoading(true);
+        const day = date.toISOString().slice(0, 10);
+        const res = await mapAPI.tiles({
+          basin_id: basinId || undefined,
+          date: day,
+        });
+        setTiles(res.data.features || []);
+      } catch (error) {
+        console.error("Failed to load tiles:", error);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [basinId],
+  );
 
   useEffect(() => {
-    if (visible) {
-      loadTilesForDate(currentDate);
-    }
-  }, [visible, currentDate]);
+    if (visible) loadTilesForDate(currentDate);
+  }, [visible, currentDate, loadTilesForDate]);
+
+  useEffect(() => {
+    if (!visible) return;
+    const onZoom = () => setZoom(map.getZoom());
+    map.on("zoomend", onZoom);
+    return () => {
+      map.off("zoomend", onZoom);
+    };
+  }, [map, visible]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -67,30 +97,39 @@ export default function TimelapseHeatmap({
     };
   }, [isPlaying, speed, endDate]);
 
-  const loadTilesForDate = async (date: Date) => {
-    try {
-      setLoading(true);
-      const day = date.toISOString().slice(0, 10);
-      const res = await mapAPI.tiles({ basin_id: basinId || undefined, date: day });
-      setTiles(res.data.features || []);
-    } catch (error) {
-      console.error("Failed to load tiles:", error);
-    } finally {
-      setLoading(false);
-    }
+  const styleForContext = (riskLevel: string) => {
+    const color = RISK_COLORS[riskLevel] || "#94a3b8";
+    const isImagery = basemapMode === "imagery";
+    const z = zoom;
+    const fillOpacity = isImagery
+      ? z <= 6
+        ? 0.5
+        : z <= 8
+          ? 0.56
+          : 0.62
+      : z <= 6
+        ? 0.34
+        : z <= 8
+          ? 0.42
+          : 0.5;
+
+    const weight = z <= 6 ? 0.7 : z <= 8 ? 0.9 : 1.2;
+    const strokeOpacity = isImagery ? 0.9 : 0.75;
+    const strokeColor = isImagery
+      ? "rgba(15,23,42,0.55)"
+      : "rgba(15,23,42,0.25)";
+
+    return {
+      fillColor: color,
+      fillOpacity,
+      color: strokeColor,
+      weight,
+      opacity: strokeOpacity,
+    };
   };
 
   const getTileStyle = (feature: any) => {
-    const riskLevel = feature.properties.riskLevel;
-    const color = RISK_COLORS[riskLevel] || "#94a3b8";
-    
-    return {
-      fillColor: color,
-      fillOpacity: 0.6,
-      color: color,
-      weight: 1,
-      opacity: 0.8,
-    };
+    return styleForContext(feature?.properties?.riskLevel);
   };
 
   const onEachFeature = (feature: any, layer: L.Layer) => {
@@ -98,13 +137,14 @@ export default function TimelapseHeatmap({
     
     layer.bindTooltip(
       `
-      <div class="text-xs">
-        <div class="font-bold">${props.riskLevel.toUpperCase()}</div>
-        <div>💧 ${props.stats.avgWaterLevel.toFixed(1)} ม.</div>
-        <div>🌧️ ${props.stats.rainfall24h.toFixed(0)} มม.</div>
+      <div class="map-tooltip-panel">
+        <div class="map-tooltip-title">${String(props.riskLevel || "").toUpperCase()}</div>
+        <div class="map-tooltip-meta">
+          WL ${props.stats.avgWaterLevel.toFixed(1)} m · Rain ${props.stats.rainfall24h.toFixed(0)} mm
+        </div>
       </div>
       `,
-      { sticky: true }
+      { sticky: true, className: "map-tooltip-mono" }
     );
   };
 

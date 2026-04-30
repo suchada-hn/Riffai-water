@@ -8,6 +8,9 @@ from app.models.models import SatelliteImage, WaterLevel, Rainfall, Station
 from app.services.satellite_service import SatelliteService
 from app.services.water_service import WaterService
 from app.config import get_settings
+from app.services.cloud_run_status_service import get_cloud_run_status_service
+from app.services.forecast_integration_service import get_forecast_integration_service
+from app.services.sar_integration_service import get_sar_integration_service
 
 router = APIRouter()
 settings = get_settings()
@@ -189,3 +192,49 @@ async def test_earth_engine():
     sat_service = SatelliteService()
     result = sat_service.test_connection()
     return result
+
+
+@router.get("/status")
+async def integration_status():
+    """
+    Integration freshness/status for external feeds (ONWR forecast + SAR).
+
+    - Cloud Run job status is fetched only when CLOUD_RUN_STATUS_ENABLED=true.
+    - GCS freshness is inferred from newest parseable object under configured prefixes.
+    """
+    cloud = get_cloud_run_status_service()
+    forecast = get_forecast_integration_service()
+    sar = get_sar_integration_service()
+
+    # GCS inferred
+    forecast_art = forecast.resolve_latest_artifact()
+    sar_art = sar.resolve_latest_artifact()
+
+    # Cloud Run job status (optional; can fail gracefully)
+    forecast_job_name = settings.CLOUD_RUN_JOB_ONWR_FORECAST_THAILAND
+    sar_job_name = settings.CLOUD_RUN_JOB_SAR_PIPELINE
+
+    forecast_job = await cloud.get_job_status(forecast_job_name)
+    sar_job = await cloud.get_job_status(sar_job_name)
+
+    return {
+        "timestamp": datetime.utcnow().isoformat(),
+        "cloudRun": {
+            "enabled": cloud.enabled(),
+            "forecastJob": forecast_job.to_dict(),
+            "sarJob": sar_job.to_dict(),
+        },
+        "gcs": {
+            "available": bool(forecast.gcs.client),
+            "forecast": {
+                "fresh": forecast.is_fresh(forecast_art),
+                "artifact": forecast_art.to_meta(),
+                "maxAgeHours": settings.ONWR_FORECAST_MAX_AGE_HOURS,
+            },
+            "sar": {
+                "fresh": sar.is_fresh(sar_art),
+                "artifact": sar_art.to_meta(),
+                "maxAgeHours": settings.SAR_MAX_AGE_HOURS,
+            },
+        },
+    }

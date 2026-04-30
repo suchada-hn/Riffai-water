@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, Suspense } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  Suspense,
+} from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Layers, Loader2 } from "lucide-react";
@@ -14,12 +21,15 @@ import { APP_TO_ONWR_BASIN } from "@/constants/onwrBasins";
 import { useFloodLayer } from "@/hooks/useFloodLayer";
 import FloodLayerPanel from "@/components/map/FloodLayerPanel";
 import FloodV3ValidationLegend from "@/components/map/FloodV3ValidationLegend";
-import TambonFloodMapLegend from "@/components/map/TambonFloodMapLegend";
 import FoliumFloodLegend from "../../components/map/FoliumFloodLegend";
+import type { FoliumFloodLoadPayload } from "@/components/map/FoliumFloodProbabilityLayer";
 import MapDrawer from "@/components/map/ui/MapDrawer";
 import LayerToggleRow from "@/components/map/ui/LayerToggleRow";
 import TambonDetailPanel from "@/components/map/TambonDetailPanel";
 import MapOperationsSummary from "@/components/map/MapOperationsSummary";
+import FloodRiskHeatmapPanel, {
+  type HeatmapTileLite,
+} from "@/components/map/FloodRiskHeatmapPanel";
 
 const MapView = dynamic(() => import("@/components/map/MapViewSimple"), {
   ssr: false,
@@ -71,9 +81,12 @@ function MapContent() {
     v3DailyValidation: true,
   });
   const basemapKeys = ["osmBasemap", "esriBasemap", "onwrTiffBasemap"] as const;
-  const [foliumFloodFeatureCount, setFoliumFloodFeatureCount] = useState<
-    number | null
-  >(null);
+  const [foliumFloodHud, setFoliumFloodHud] =
+    useState<FoliumFloodLoadPayload | null>(null);
+
+  const handleFoliumFloodLoaded = useCallback((payload: FoliumFloodLoadPayload) => {
+    setFoliumFloodHud(payload);
+  }, []);
   const {
     geojson: onwrFc,
     dates: onwrDates,
@@ -102,10 +115,15 @@ function MapContent() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [integrationStatus, setIntegrationStatus] = useState<any>(null);
   const [selectedTambon, setSelectedTambon] = useState<any>(null);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [subbasinsLoading, setSubbasinsLoading] = useState(false);
   const [needsBasinForSar, setNeedsBasinForSar] = useState(false);
+  const [heatmapTiles, setHeatmapTiles] = useState<HeatmapTileLite[]>([]);
+  const [heatmapFocusCenter, setHeatmapFocusCenter] = useState<
+    [number, number] | null
+  >(null);
 
   const loadMapData = async () => {
     try {
@@ -185,6 +203,21 @@ function MapContent() {
   useEffect(() => {
     loadMapData();
   }, [selectedBasin]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await pipelineAPI.status();
+        if (!cancelled) setIntegrationStatus(res.data);
+      } catch {
+        if (!cancelled) setIntegrationStatus(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lastUpdate]);
 
   useEffect(() => {
     const syncUrl = () => {
@@ -345,7 +378,19 @@ function MapContent() {
       });
       return;
     }
-    setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+    setLayers((prev) => {
+      const nextOn = !prev[key];
+      const next = { ...prev, [key]: nextOn };
+      if (
+        nextOn &&
+        (key === "foliumFloodProbability" || key === "tambonFlood")
+      ) {
+        next.osmBasemap = false;
+        next.esriBasemap = true;
+        next.onwrTiffBasemap = false;
+      }
+      return next;
+    });
   };
 
   useEffect(() => {
@@ -380,6 +425,20 @@ function MapContent() {
     URL.revokeObjectURL(a.href);
   };
 
+  const basemapMode: "light" | "imagery" =
+    layers.esriBasemap || layers.onwrTiffBasemap ? "imagery" : "light";
+
+  const topHeatmapTiles = useMemo(() => {
+    if (!heatmapTiles.length) return [];
+    return [...heatmapTiles]
+      .sort(
+        (a, b) =>
+          Number(b.stats?.populationAtRisk ?? 0) -
+          Number(a.stats?.populationAtRisk ?? 0),
+      )
+      .slice(0, 10);
+  }, [heatmapTiles]);
+
   return (
     <div className="relative h-[calc(100vh-4rem)] bg-gray-50">
       <div className="absolute inset-0">
@@ -394,7 +453,10 @@ function MapContent() {
           onwrSarDate={onwrDate}
           onwrNationalGeoJSON={onwrNationalFiltered}
           v3DailyGeoJSON={v3DailyFc}
-          onFoliumFloodLoaded={(count) => setFoliumFloodFeatureCount(count)}
+          onFoliumFloodLoaded={handleFoliumFloodLoaded}
+          basemapMode={basemapMode}
+          onHeatmapTilesLoaded={(tiles) => setHeatmapTiles(tiles as any)}
+          heatmapFocusCenter={heatmapFocusCenter}
           layers={layers}
         />
 
@@ -419,6 +481,22 @@ function MapContent() {
             <h3 className="text-xs font-semibold uppercase tracking-wider text-primary-600">
               Location
             </h3>
+            {integrationStatus && (
+              <div className="rounded-mono border border-primary-200 bg-white px-3 py-2 text-[11px] text-primary-700">
+                <div className="font-semibold text-primary-900">Data freshness</div>
+                <div className="font-mono mt-1">
+                  Forecast:{" "}
+                  <strong>
+                    {integrationStatus?.gcs?.forecast?.fresh ? "fresh" : "stale"}
+                  </strong>
+                  {" · "}
+                  SAR:{" "}
+                  <strong>
+                    {integrationStatus?.gcs?.sar?.fresh ? "fresh" : "stale"}
+                  </strong>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-primary-600 uppercase tracking-wider mb-2">
                 Select Basin
@@ -526,13 +604,13 @@ function MapContent() {
                 },
                 {
                   key: "tambonFlood" as const,
-                  label: "Tambon Flood Prediction",
-                  description: "XGBoost AI model (6,363 tambons)",
+                  label: "Tambon flood sidebar",
+                  description: "Top risk list from static public/geojson (no API)",
                 },
                 {
                   key: "foliumFloodProbability" as const,
-                  label: "Folium Flood Probability (Tambon polygons)",
-                  description: "Standalone high-contrast polygon layer",
+                  label: "Folium flood polygons (map)",
+                  description: "Choropleth from static tambon_flood_probability_polygons.geojson",
                 },
                 {
                   key: "v3DailyValidation" as const,
@@ -638,6 +716,16 @@ function MapContent() {
         </MapDrawer>
 
         <div className="absolute top-4 right-4 z-[1000] w-[min(92vw,22rem)] max-h-[calc(100%-2rem)] overflow-y-auto space-y-3 pointer-events-none">
+          {!layers.timelapse && layers.heatmap && (
+            <FloodRiskHeatmapPanel
+              tileSummary={tileSummary}
+              basinId={selectedBasin}
+              topTiles={topHeatmapTiles}
+              onFocusTile={(c) => setHeatmapFocusCenter(c)}
+              basemapMode={basemapMode}
+              position="inline"
+            />
+          )}
           {layers.onwrSar && selectedBasin && (
             <FloodLayerPanel
               dates={onwrDates}
@@ -657,18 +745,10 @@ function MapContent() {
               position="inline"
             />
           )}
-          {layers.tambonFlood && (
-            <TambonFloodMapLegend
-              loading={false}
-              error={null}
-              stats={null}
-              featureCount={undefined}
-              position="inline"
-            />
-          )}
           {layers.foliumFloodProbability && (
             <FoliumFloodLegend
-              featureCount={foliumFloodFeatureCount ?? undefined}
+              featureCount={foliumFloodHud?.featureCount}
+              bandCounts={foliumFloodHud?.bandCounts}
               position="inline"
             />
           )}

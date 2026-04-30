@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { tambonAPI } from "@/services/api";
 import { AlertTriangle, TrendingUp } from "lucide-react";
+import type { GeoJSONFeatureCollection } from "@/types";
+import {
+  STATIC_FLOOD_GEOJSON_URL,
+  aggregateBandCounts,
+  featureToTambonRow,
+} from "@/lib/floodStaticGeojson";
 
 interface TambonData {
   tb_idn: string;
@@ -37,77 +42,105 @@ export default function TambonFloodLayer({
 }: Props) {
   const [tambons, setTambons] = useState<TambonData[]>([]);
   const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<{
+    total_sub_districts: number;
+    risk_distribution: Record<string, number>;
+  } | null>(null);
 
   useEffect(() => {
-    if (visible) {
-      loadTambons();
-      loadStats();
+    if (!visible) {
+      setTambons([]);
+      setStats(null);
+      return;
     }
-  }, [visible, riskFilter, minProbability]);
 
-  const loadTambons = async () => {
-    try {
+    let cancelled = false;
+    (async () => {
       setLoading(true);
-      const response = await tambonAPI.getTopRisk(500);
-      let data = response.data.tambons || [];
+      try {
+        const res = await fetch(STATIC_FLOOD_GEOJSON_URL);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const fc = (await res.json()) as GeoJSONFeatureCollection;
+        if (cancelled) return;
 
-      // Apply filters
-      if (riskFilter) {
-        data = data.filter((t: TambonData) => t.risk_level === riskFilter);
+        const rows: TambonData[] = [];
+        for (const f of fc.features || []) {
+          const row = featureToTambonRow(f);
+          if (row) rows.push(row);
+        }
+
+        let filtered = rows;
+        if (riskFilter) {
+          filtered = filtered.filter((t) => t.risk_level === riskFilter);
+        }
+        if (minProbability !== undefined) {
+          filtered = filtered.filter(
+            (t) => t.flood_probability >= minProbability,
+          );
+        }
+
+        const sorted = [...filtered].sort(
+          (a, b) => b.flood_percent - a.flood_percent,
+        );
+
+        const bands = aggregateBandCounts(fc);
+        setStats({
+          total_sub_districts: fc.features?.length ?? 0,
+          risk_distribution: {
+            VERY_HIGH: bands.veryHigh,
+            HIGH: bands.high,
+            MEDIUM: bands.medium,
+            LOW: bands.low,
+            VERY_LOW: bands.safe + bands.unknown,
+          },
+        });
+        setTambons(sorted.slice(0, 500));
+      } catch (e) {
+        console.error("Error loading static tambon flood GeoJSON:", e);
+        if (!cancelled) {
+          setTambons([]);
+          setStats(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      if (minProbability !== undefined) {
-        data = data.filter((t: TambonData) => t.flood_probability >= minProbability);
-      }
+    })();
 
-      setTambons(data);
-    } catch (error) {
-      console.error("Error loading tambons:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const response = await tambonAPI.getStats();
-      setStats(response.data);
-    } catch (error) {
-      console.error("Error loading stats:", error);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, riskFilter, minProbability]);
 
   if (!visible) return null;
 
   return (
     <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-4 max-w-sm z-[1000]">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-3 pb-3 border-b">
         <AlertTriangle className="w-5 h-5 text-red-600" />
         <div>
-          <h3 className="font-bold text-black">Tambon Flood Risk</h3>
-          <p className="text-xs text-gray-600">XGBoost Model Predictions</p>
+          <h3 className="font-bold text-black">Tambon flood risk</h3>
+          <p className="text-xs text-gray-600">
+            Static GeoJSON (same file as Folium layer)
+          </p>
         </div>
       </div>
 
-      {/* Stats Summary */}
       {stats && (
         <div className="mb-4 space-y-2">
           <div className="text-sm">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-gray-600">Total Coverage</span>
+              <span className="text-gray-600">Polygons loaded</span>
               <span className="font-bold text-black">
-                {stats.total_tambons?.toLocaleString() || "6,363"} tambons
+                {stats.total_sub_districts.toLocaleString()}
               </span>
             </div>
           </div>
 
-          {/* Risk Distribution */}
           <div className="space-y-1">
             {Object.entries(RISK_COLORS).map(([level, color]) => {
-              const count = stats.risk_distribution?.[level] || 0;
-              const percent = stats.total_tambons
-                ? ((count / stats.total_tambons) * 100).toFixed(1)
+              const count = stats.risk_distribution[level] || 0;
+              const percent = stats.total_sub_districts
+                ? ((count / stats.total_sub_districts) * 100).toFixed(1)
                 : "0";
 
               return (
@@ -116,7 +149,9 @@ export default function TambonFloodLayer({
                     className="w-3 h-3 rounded"
                     style={{ backgroundColor: color }}
                   />
-                  <span className="text-gray-600 flex-1">{level.replace("_", " ")}</span>
+                  <span className="text-gray-600 flex-1">
+                    {level.replace(/_/g, " ")}
+                  </span>
                   <span className="font-medium text-black">
                     {count.toLocaleString()} ({percent}%)
                   </span>
@@ -127,15 +162,14 @@ export default function TambonFloodLayer({
         </div>
       )}
 
-      {/* Top Risk Tambons */}
       <div>
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="w-4 h-4 text-red-600" />
-          <h4 className="font-bold text-sm text-black">Highest Risk Areas</h4>
+          <h4 className="font-bold text-sm text-black">Highest risk (top 500)</h4>
         </div>
 
         {loading ? (
-          <div className="text-center py-4 text-gray-500 text-sm">Loading...</div>
+          <div className="text-center py-4 text-gray-500 text-sm">Loading…</div>
         ) : (
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {tambons.slice(0, 10).map((tambon) => (
@@ -160,7 +194,9 @@ export default function TambonFloodLayer({
                     >
                       {tambon.flood_percent.toFixed(1)}%
                     </div>
-                    <div className="text-xs text-gray-500">{tambon.risk_level}</div>
+                    <div className="text-xs text-gray-500">
+                      {tambon.risk_level}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -169,14 +205,10 @@ export default function TambonFloodLayer({
         )}
       </div>
 
-      {/* Legend */}
       <div className="mt-4 pt-3 border-t">
         <div className="text-xs text-gray-500">
-          Model: XGBoost V2 (AUC-ROC: 0.9131)
-          <br />
-          Coverage: 6,363 sub-districts nationwide
-          <br />
-          Updated: Daily at 06:00 AM
+          Source: <code className="text-[10px]">public/geojson/</code> — replace
+          after offline export (Folium / geopandas). No backend API.
         </div>
       </div>
     </div>
